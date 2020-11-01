@@ -20,6 +20,7 @@ import {Compound} from "./interfaces/Compound.sol";
 import {Aave} from "./interfaces/Aave.sol";
 import {AToken} from "./interfaces/AToken.sol";
 import {ICurve} from "./interfaces/ICurve.sol";
+import {IOneSplit} from "./interfaces/IOneSplit.sol";
 
 contract AddressStorage is OwnableUpgradeSafe {
     enum Lender {NOT_FOUND, COMPOUND, AAVE}
@@ -46,6 +47,7 @@ contract AddressStorage is OwnableUpgradeSafe {
     address public aaveLendingPool;
     address public aaveCore;
     address public curve;
+    address public oneInchPortal;
 
     mapping(address => Lender) public lenders;
     mapping(address => TokenType) public tokenTypes;
@@ -104,6 +106,13 @@ contract AddressStorage is OwnableUpgradeSafe {
         curve = _newCurvePool;
     }
 
+    // @dev set new 1Inch portal
+    // @param _newOneInch Curve pool address
+    function setNewOneInch(address _newOneInch) public onlyOwner {
+        require(_newOneInch != address(0), "new _newOneInch is empty");
+        oneInchPortal = _newOneInch;
+    }
+
     // @dev set interest bearing token to its stable coin underlying
     // @param interestToken ERC20 address
     // @param underlyingToken stable coin ERC20 address
@@ -159,6 +168,7 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         aaveLendingPool = address(0x398eC7346DcD622eDc5ae82352F02bE94C62d119);
         aaveCore = address(0x3dfd23A6c5E8BbcFc9581d2E864a68feb6a076d3);
         curve = address(0x45F783CCE6B7FF23B2ab2D70e416cdb7D6055f51); // yPool
+        oneInchPortal = address(0x11111254369792b2Ca5d084aB5eEA397cA8fa48B); // 1Inch
 
         address cDai = 0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643;
         address cUsdc = 0x39AA39c021dfbaE8faC545936693aC917d5E7563;
@@ -260,64 +270,36 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         address to,
         uint256 amount,
         uint256 minReturnAmount
-    ) public nonReentrant returns (uint256 balanceofSwappedtoken) {
-        address fromTokencalculatedUnderlyingStablecoin;
+    ) public nonReentrant returns (uint256) {
+        uint256 balanceofSwappedtoken;
 
-        // from token calculations
-        if (tokenTypes[from] == TokenType.INTEREST_TOKEN) {
-            _transferAmountToSwap(from, amount);
-            if (lenders[from] == Lender.COMPOUND) {
-                _withdrawCompound(from);
-            } else if (lenders[from] == Lender.AAVE) {
-                _withdrawAave(from);
-            }
+        // non core swaps
+        if (
+            tokenTypes[from] == TokenType.NOT_FOUND ||
+            tokenTypes[to] == TokenType.NOT_FOUND
+        ) {
+            (uint256 retAmount, uint256[] memory distribution) = IOneSplit(
+                oneInchPortal
+            )
+                .getExpectedReturn(IERC20(from), IERC20(to), amount, 1, 0);
 
-            fromTokencalculatedUnderlyingStablecoin = interestTokenToUnderlyingStablecoin[from];
-        } else if (tokenTypes[from] == TokenType.STABLE_COIN) {
-            _transferAmountToSwap(from, amount);
-            fromTokencalculatedUnderlyingStablecoin = from;
-        } else {
-            revert("Token currently unswapable");
-        }
-
-        // to token calculations
-        if (tokenTypes[to] == TokenType.STABLE_COIN) {
-            if (fromTokencalculatedUnderlyingStablecoin == to) {
-                balanceofSwappedtoken = balanceOfToken(
-                    fromTokencalculatedUnderlyingStablecoin
-                );
-            } else {
-                _swapViaCurve(
-                    fromTokencalculatedUnderlyingStablecoin,
-                    to,
-                    minReturnAmount
-                );
-                balanceofSwappedtoken = balanceOfToken(to);
-            }
-        } else if (tokenTypes[to] == TokenType.INTEREST_TOKEN) {
-            address toTokenStablecoin = interestTokenToUnderlyingStablecoin[to];
-
-            if (fromTokencalculatedUnderlyingStablecoin != toTokenStablecoin) {
-                _swapViaCurve(
-                    fromTokencalculatedUnderlyingStablecoin,
-                    toTokenStablecoin,
-                    minReturnAmount
-                );
-            }
-
-            uint256 balanceToTokenStableCoin = balanceOfToken(
-                toTokenStablecoin
+            balanceofSwappedtoken = IOneSplit(oneInchPortal).swap(
+                IERC20(from),
+                IERC20(to),
+                amount,
+                retAmount,
+                distribution,
+                0 // flags
             );
-
-            if (balanceToTokenStableCoin > 0) {
-                if (lenders[to] == Lender.COMPOUND) {
-                    _supplyCompound(to, balanceToTokenStableCoin);
-                } else if (lenders[to] == Lender.AAVE) {
-                    _supplyAave(toTokenStablecoin, balanceToTokenStableCoin);
-                }
-            }
-
-            balanceofSwappedtoken = balanceOfToken(to);
+        } else {
+            // core swaps
+            uint256 returnedAmount = _swapCoreTokens(
+                from,
+                to,
+                amount,
+                minReturnAmount
+            );
+            balanceofSwappedtoken = returnedAmount;
         }
 
         IERC20(to).safeTransfer(recipient, balanceofSwappedtoken);
@@ -353,6 +335,70 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
     }
 
     /* ============ Internal ============ */
+    function _swapCoreTokens(
+        address from,
+        address to,
+        uint256 amount,
+        uint256 minReturnAmount
+    ) internal returns (uint256 balanceofSwappedtoken) {
+        address fromTokencalculatedUnderlyingStablecoin;
+
+        // from token calculations
+        if (tokenTypes[from] == TokenType.INTEREST_TOKEN) {
+            _transferAmountToSwap(from, amount);
+            if (lenders[from] == Lender.COMPOUND) {
+                _withdrawCompound(from);
+            } else if (lenders[from] == Lender.AAVE) {
+                _withdrawAave(from);
+            }
+
+            fromTokencalculatedUnderlyingStablecoin = interestTokenToUnderlyingStablecoin[from];
+        } else {
+            _transferAmountToSwap(from, amount);
+            fromTokencalculatedUnderlyingStablecoin = from;
+        }
+
+        // to token calculations
+        if (tokenTypes[to] == TokenType.STABLE_COIN) {
+            if (fromTokencalculatedUnderlyingStablecoin == to) {
+                balanceofSwappedtoken = balanceOfToken(
+                    fromTokencalculatedUnderlyingStablecoin
+                );
+            } else {
+                _swapViaCurve(
+                    fromTokencalculatedUnderlyingStablecoin,
+                    to,
+                    minReturnAmount
+                );
+                balanceofSwappedtoken = balanceOfToken(to);
+            }
+        } else {
+            address toTokenStablecoin = interestTokenToUnderlyingStablecoin[to];
+
+            if (fromTokencalculatedUnderlyingStablecoin != toTokenStablecoin) {
+                _swapViaCurve(
+                    fromTokencalculatedUnderlyingStablecoin,
+                    toTokenStablecoin,
+                    minReturnAmount
+                );
+            }
+
+            uint256 balanceToTokenStableCoin = balanceOfToken(
+                toTokenStablecoin
+            );
+
+            if (balanceToTokenStableCoin > 0) {
+                if (lenders[to] == Lender.COMPOUND) {
+                    _supplyCompound(to, balanceToTokenStableCoin);
+                } else if (lenders[to] == Lender.AAVE) {
+                    _supplyAave(toTokenStablecoin, balanceToTokenStableCoin);
+                }
+            }
+
+            balanceofSwappedtoken = balanceOfToken(to);
+        }
+    }
+
     function _transferAmountToSwap(address from, uint256 amount) internal {
         IERC20(from).safeTransferFrom(msg.sender, address(this), amount);
     }
