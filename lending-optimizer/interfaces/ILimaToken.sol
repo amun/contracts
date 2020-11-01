@@ -1,4 +1,4 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.6;
 
 import {IERC20} from "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/IERC20.sol";
 
@@ -11,11 +11,15 @@ import {IERC20} from "@openzeppelin/contracts-ethereum-package/contracts/token/E
 interface ILimaToken is IERC20 {
     /* ============ Functions ============ */
     
-    function create(IERC20 _investmentToken, uint256 _amount, address _holder) external returns (bool);
-    function redeem(IERC20 _payoutToken, uint256 _amount, address _holder) external returns (bool);
-    function rebalance(address _bestToken) external returns (bool);
-    function getTokenValue(address _targetToken) external view returns (uint256 tokenValue);
+    function create(IERC20 _investmentToken, uint256 _amount, address _recipient, uint256 _minimumReturn) external returns (bool);
+    function redeem(IERC20 _payoutToken, uint256 _amount, address _recipient, uint256 _minimumReturn) external returns (bool);
+    function rebalance(address _bestToken, uint256 _minimumReturn) external returns (bool);
     function getNetTokenValue(address _targetToken) external view returns (uint256 netTokenValue);
+    function getNetTokenValueOf(address _targetToken, uint256 _amount) external view returns (uint256 netTokenValue);
+
+    function getUnderlyingTokenBalance() external view returns (uint256 balance);
+
+    function getUnderlyingTokenBalanceOf(uint256 _amount) external view returns (uint256 balance);
 
     function mint(address _account, uint256 _quantity) external;
     function burn(address _account, uint256 _quantity) external;

@@ -1,4 +1,4 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.6;
 
 import {
     ERC20PausableUpgradeSafe,
@@ -8,9 +8,14 @@ import {
 import {
     SafeERC20
 } from "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/SafeERC20.sol";
+
 import {AddressArrayUtils} from "./library/AddressArrayUtils.sol";
-import {OwnableLimaManager} from "./limaTokenModules/OwnableLimaManager.sol";
+
 import {ILimaSwap} from "./interfaces/ILimaSwap.sol";
+import {ILimaManager} from "./interfaces/ILimaManager.sol";
+import {ILimaTokenHelper} from "./interfaces/ILimaTokenHelper.sol";
+import {ILimaOracleReceiver} from "./interfaces/ILimaOracleReceiver.sol";
+import {ILimaOracle} from "./interfaces/ILimaOracle.sol";
 
 /**
  * @title LimaToken
@@ -18,17 +23,19 @@ import {ILimaSwap} from "./interfaces/ILimaSwap.sol";
  *
  * Standard LimaToken.
  */
-contract LimaToken is OwnableLimaManager, ERC20PausableUpgradeSafe {
+contract LimaToken is ERC20PausableUpgradeSafe {
     using AddressArrayUtils for address[];
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    uint256 public constant MAX_UINT256 = 2**256 - 1;
-    // List of UnderlyingTokens
-    address[] public underlyingTokens;
-    address public currentUnderlyingToken;
-    address public owner;
-    ILimaSwap public limaSwap;
+    event Create(address _from, uint256 _amount);
+    event Redeem(address _from, uint256 _amount);
+    event RebalanceInit(address _sender);
+    event RebalanceExecute(address _oldToken, address _newToken);
+    event ReadyForRebalance();
+
+    // address public owner;
+    ILimaTokenHelper public limaTokenHelper; //limaTokenStorage
 
     /**
      * @dev Initializes contract
@@ -36,162 +43,119 @@ contract LimaToken is OwnableLimaManager, ERC20PausableUpgradeSafe {
     function initialize(
         string memory name,
         string memory symbol,
-        address _limaSwap
+        address _limaTokenHelper,
+        uint256 _underlyingAmount,
+        uint256 _limaAmount
     ) public initializer {
-        owner = _msgSender();
-        limaSwap = ILimaSwap(_limaSwap);
-        __Context_init_unchained();
-
-        __OwnableLimaManager_init_unchained();
+        limaTokenHelper = ILimaTokenHelper(_limaTokenHelper);
 
         __ERC20_init(name, symbol);
         __ERC20Pausable_init();
+
+        if (_underlyingAmount > 0 && _limaAmount > 0) {
+            IERC20(limaTokenHelper.currentUnderlyingToken()).safeTransferFrom(
+                msg.sender,
+                address(this),
+                _underlyingAmount
+            );
+            _mint(msg.sender, _limaAmount);
+        }
     }
 
     /* ============ Modifiers ============ */
 
-    modifier onlyUnderlyingToken(address _token) {
+    modifier onlyNotRebalancing() {
+        _isRebalancing(false);
+        _;
+    }
+    modifier onlyRebalancing() {
+        _isRebalancing(true);
+        _;
+    }
+
+    function _isRebalancing(bool active) internal view {
         // Internal function used to reduce bytecode size
         require(
-            isUnderlyingTokens(_token),
-            "Only token that are part of Underlying Tokens"
+            limaTokenHelper.isRebalancing() == active,
+            "LM10" //"Only when rebalancing is active/inactive"
         );
+    }
+
+    modifier onlyUnderlyingToken(address _token) {
+        _isOnlyUnderlyingToken(_token);
         _;
+    }
+
+    function _isOnlyUnderlyingToken(address _token) internal view {
+        // Internal function used to reduce bytecode size
+        require(
+            limaTokenHelper.isUnderlyingTokens(_token),
+            "LM1" //"Only token that are part of Underlying Tokens"
+        );
+    }
+
+    modifier onlyInvestmentToken(address _investmentToken) {
+        // Internal function used to reduce bytecode size
+        _isOnlyInvestmentToken(_investmentToken);
+        _;
+    }
+
+    function _isOnlyInvestmentToken(address _investmentToken) internal view {
+        // Internal function used to reduce bytecode size
+        require(
+            limaTokenHelper.isInvestmentToken(_investmentToken),
+            "LM7" //nly token that are approved to invest/payout.
+        );
     }
 
     /**
      * @dev Throws if called by any account other than the limaManager.
      */
     modifier onlyLimaManagerOrOwner() {
-        require(
-            limaManager() == _msgSender() || owner == _msgSender(),
-            "Ownable: caller is not the limaManager or owner"
-        );
+        _isOnlyLimaManagerOrOwner();
         _;
     }
 
-    /* ============ Getter Setter ============ */
-
-    function addUnderlyingToken(address _underlyingToken)
-        external
-        onlyLimaManagerOrOwner
-    {
-        IERC20(_underlyingToken).safeApprove(address(limaSwap), MAX_UINT256);
-        underlyingTokens.push(_underlyingToken);
+    function _isOnlyLimaManagerOrOwner() internal view {
+        require(
+            limaTokenHelper.limaManager() == _msgSender() ||
+                limaTokenHelper.owner() == _msgSender(),
+            "LM2" // "Ownable: caller is not the limaManager or owner"
+        );
     }
 
-    function removeUnderlyingToken(address _underlyingToken)
-        external
-        onlyLimaManagerOrOwner
-    {
-        underlyingTokens = underlyingTokens.remove(_underlyingToken);
+    modifier onlyAmunUsers() {
+        _isOnlyAmunUser();
+        _;
     }
 
-    function setCurrentUnderlyingToken(address _currentUnderlyingToken)
-        external
-        onlyUnderlyingToken(_currentUnderlyingToken)
-        onlyLimaManagerOrOwner
-    {
-        currentUnderlyingToken = _currentUnderlyingToken;
-    }
-
-    function setLimaSwap(address _limaSwap)
-        public
-        onlyLimaManagerOrOwner
-    {
-        require(_limaSwap != address(0), "LimaSwap: new lima swap is the zero address");
-        limaSwap = ILimaSwap(_limaSwap);
+    function _isOnlyAmunUser() internal view {
+        if (limaTokenHelper.isOnlyAmunUserActive()) {
+            require(
+                limaTokenHelper.isAmunUser(msg.sender),
+                "LM3" //"AmunUsers: msg sender must be part of amunUsers."
+            );
+        }
     }
 
     /* ============ View ============ */
 
-    function isUnderlyingTokens(address _underlyingToken)
-        public
-        view
-        returns (bool)
-    {
-        return underlyingTokens.contains(_underlyingToken);
-    }
-
-    function getTokenValueOf(
-        address _fromToken,
-        address _targetToken,
-        uint256 _amount
-    ) public view returns (uint256 value) {
-        value = limaSwap.getExpectedReturn(_fromToken, _targetToken, _amount);
-        return value;
-    }
-
-    function getCurrentUnderlyingTokenValue(address _targetToken)
-        public
-        view
-        returns (uint256 netTokenValue)
-    {
+    function getUnderlyingTokenBalance() public view returns (uint256 balance) {
         return
-            getTokenValueOf(
-                currentUnderlyingToken,
-                _targetToken,
-                getUnderlyingTokenBalance()
+            IERC20(limaTokenHelper.currentUnderlyingToken()).balanceOf(
+                address(this)
             );
     }
 
-    function getTotalTokenValue(address _targetToken)
+    function getUnderlyingTokenBalanceOf(uint256 _amount)
         public
         view
-        returns (uint256 netTokenValue)
+        returns (uint256 balanceOf)
     {
-        return getCurrentUnderlyingTokenValue(_targetToken);
-    }
-
-    /**
-     * @dev Get token value.
-     */
-    function getTokenValue(address _targetToken)
-        public
-        view
-        returns (uint256 tokenValue)
-    {
-        //todo is this one ??
-        return getTokenValueOf(currentUnderlyingToken, _targetToken, 1 ether); //10 ** IERC20(currentUnderlyingToken).decimals());
-    }
-
-    /**
-     * @dev Get total net token value.
-     */
-    function getNetTokenValue(address _targetToken)
-        public
-        view
-        returns (uint256 netTokenValue)
-    {
-        return getTotalTokenValue(_targetToken);
-    }
-
-    function getUnderlyingTokenBalance() public view returns (uint256 balance) {
-        return IERC20(currentUnderlyingToken).balanceOf(address(this));
-    }
-
-    function getUnderlyingTokenBalancePerToken()
-        public
-        view
-        returns (uint256 balancePerToken)
-    {
-        uint256 balance = getUnderlyingTokenBalance();
-        return balance.div(totalSupply());
+        return getUnderlyingTokenBalance().mul(_amount).div(totalSupply());
     }
 
     /* ============ Lima Manager ============ */
-
-    //to allow rebalances to happen limaSwap needs to be approved
-    function approveUnderlyingToken(uint256 amount)
-        public
-        onlyLimaManagerOrOwner
-        returns (bool)
-    {
-        IERC20(currentUnderlyingToken).safeApprove(limaManager(), amount);
-        IERC20(currentUnderlyingToken).safeApprove(address(limaSwap), amount);
-
-        return true;
-    }
 
     // functions used in rebalances
     function mint(address account, uint256 amount)
@@ -199,13 +163,6 @@ contract LimaToken is OwnableLimaManager, ERC20PausableUpgradeSafe {
         onlyLimaManagerOrOwner
     {
         _mint(account, amount);
-    }
-
-    function burn(address account, uint256 amount)
-        public
-        onlyLimaManagerOrOwner
-    {
-        _burn(account, amount);
     }
 
     // pausable functions
@@ -218,134 +175,307 @@ contract LimaToken is OwnableLimaManager, ERC20PausableUpgradeSafe {
     }
 
     function _swap(
-        IERC20 _from,
-        IERC20 _to,
-        uint256 _amount
+        address _from,
+        address _to,
+        uint256 _amount,
+        uint256 _minimumReturn
     ) internal returns (uint256 returnAmount) {
-        if (address(_from) != address(_to)) {
-            returnAmount = limaSwap.getExpectedReturn(
-                address(_from),
-                address(_to),
-                _amount
+        if (address(_from) != address(_to) && _amount > 0) {
+            if (
+                IERC20(_from).allowance(
+                    address(this),
+                    address(limaTokenHelper.limaSwap())
+                ) < _amount
+            ) {
+                IERC20(_from).safeApprove(
+                    address(limaTokenHelper.limaSwap()),
+                    limaTokenHelper.MAX_UINT256()
+                );
+            }
+            returnAmount = limaTokenHelper.limaSwap().swap(
+                address(this),
+                _from,
+                _to,
+                _amount,
+                _minimumReturn
             );
-            returnAmount = limaSwap.swap(_msgSender(), address(_from), address(_to), _amount, returnAmount);
             return returnAmount;
         }
         return _amount;
     }
 
-    //for airdrops ..
-    function swapToUnderlying(IERC20 _from, uint256 _amount)
-        public
-        onlyLimaManagerOrOwner
-        returns (uint256 returnAmount)
-    {
-        return swap(_from, IERC20(currentUnderlyingToken), _amount);
+    function _unwrap(
+        address _token,
+        uint256 _amount,
+        address _recipient
+    ) internal {
+        limaTokenHelper.limaSwap().unwrap(_token, _amount, _recipient);
     }
 
-    /**
-     * Swaps '_amount' token from '_from' to '_to' with 1Inch. Returns the amount of token swapped to.
-     */
     function swap(
-        IERC20 _from,
-        IERC20 _to,
-        uint256 _amount
+        address _from,
+        address _to,
+        uint256 _amount,
+        uint256 _minimumReturn
     ) public onlyLimaManagerOrOwner returns (uint256 returnAmount) {
-        return _swap(_from, _to, _amount);
+        return _swap(_from, _to, _amount, _minimumReturn);
     }
-
-    /* ============ Main Functions ============ */
 
     /**
      * @dev Rebalances LimaToken
      */
-    function rebalance(address _bestToken)
-        external
-        onlyLimaManagerOrOwner
-        returns (bool)
+    function initRebalance() external onlyNotRebalancing {
+        uint256 startGas = gasleft();
+
+        require(
+            limaTokenHelper.lastRebalance() +
+                limaTokenHelper.rebalanceInterval() <
+                now,
+            "LM5" //"Rebalance only every 24 hours"
+        );
+
+        limaTokenHelper.setLastRebalance(now);
+        limaTokenHelper.setIsRebalancing(true);
+
+        IERC20(limaTokenHelper.LINK()).transfer(address( limaTokenHelper.oracle()), 1 * 10**17); // 0.1 LINK
+        
+        limaTokenHelper.oracle().requestDeliveryStatus(address(this));
+        // limaTokenHelper.setRequestId(_requestId);
+        emit RebalanceInit(msg.sender);
+        _mint(msg.sender, limaTokenHelper.getPayback(startGas - gasleft()));
+    }
+
+    //Can a rebalnce be executed by oracle??
+    /* ============ Main Functions ============ */
+    // response structure: uint8-uint24-uint8-uint24-uint8-uint24-address
+
+    function receiveOracleData(bytes32 _requestId, bytes32 _data)
+        public
+        virtual
+        onlyRebalancing
     {
-        //todo or do this manual?
-        if (
-            IERC20(currentUnderlyingToken).allowance(
-                address(this),
-                address(limaSwap)
-            ) < 1000 ether
-        ) {
-            IERC20(currentUnderlyingToken).safeApprove(
-                address(limaSwap),
-                MAX_UINT256
-            );
-            IERC20(currentUnderlyingToken).safeApprove(
-                limaManager(),
-                MAX_UINT256
+        // require(_requestId == limaTokenHelper.requestId(), "LM11");
+
+        require(msg.sender == address(limaTokenHelper.oracle()), "LM8");
+        // LimaToken: can receive data only from oracle");
+        require(!limaTokenHelper.isOracleDataReturned(), "LM9"); //only after init rebalance
+        // (
+        //   address addr,
+        //   uint256 a,
+        //   uint256 b,
+        //   uint256 c
+        // ) = limaTokenHelper.decodeOracleData(_data);
+
+        limaTokenHelper.setOracleData(_data);
+
+        limaTokenHelper.setIsOracleDataReturned(true);
+
+        emit ReadyForRebalance();
+    }
+
+    /**
+     * @dev Rebalances LimaToken
+     */
+    function rebalance() external onlyRebalancing {
+        uint256 startGas = gasleft();
+        require(limaTokenHelper.isOracleDataReturned(), "LM8"); //Not ready to execute rebalance
+
+        (
+            address _bestToken,
+            uint256 _minimumReturn,
+            uint256 _minimumReturnGov,
+            uint256 _amountToSellForLink,
+            uint256 _minimumReturnLink,
+            address _govToken
+        ) = limaTokenHelper.getRebalancingData();
+        //send fee to fee wallet
+        _unwrap(
+            limaTokenHelper.currentUnderlyingToken(),
+            limaTokenHelper.getPerformanceFee(),
+            limaTokenHelper.feeWallet()
+        );
+
+        //swap link
+        if (_amountToSellForLink != 0) {
+            swap(
+                limaTokenHelper.currentUnderlyingToken(),
+                limaTokenHelper.LINK(),
+                _amountToSellForLink,
+                _minimumReturnLink
             );
         }
-        swap(
-            IERC20(currentUnderlyingToken),
-            IERC20(_bestToken),
-            getUnderlyingTokenBalance()
-        );
-        currentUnderlyingToken = _bestToken;
 
-        return true;
+        //swap gov
+        swap(
+            _govToken,
+            _bestToken,
+            IERC20(_govToken).balanceOf(address(this)),
+            _minimumReturnGov
+        );
+
+        //swap underlying
+        swap(
+            limaTokenHelper.currentUnderlyingToken(),
+            _bestToken,
+            getUnderlyingTokenBalance(),
+            _minimumReturn
+        );
+        emit RebalanceExecute(
+            limaTokenHelper.currentUnderlyingToken(),
+            _bestToken
+        );
+
+        limaTokenHelper.setCurrentUnderlyingToken(_bestToken);
+        limaTokenHelper.setLastUnderlyingBalancePer1000(
+            getUnderlyingTokenBalanceOf(1000 ether)
+        );
+
+        limaTokenHelper.setIsRebalancing(false);
+        limaTokenHelper.setIsOracleDataReturned(false);
+
+        _mint(msg.sender, limaTokenHelper.getPayback(startGas - gasleft()));
+    }
+
+    /**
+     * @dev Redeem the value of LimaToken in _payoutToken.
+     * @param _payoutToken The address of token to payout with.
+     * @param _amount The amount to redeem.
+     * @param _recipient The user address to redeem from/to.
+     * @param _minimumReturn The minimum amount to return or else revert.
+     */
+    function forceRedeem(
+        address _payoutToken,
+        uint256 _amount,
+        address _recipient,
+        uint256 _minimumReturn
+    ) external onlyLimaManagerOrOwner returns (bool) {
+        return
+            _redeem(
+                _recipient,
+                _payoutToken,
+                _amount,
+                _recipient,
+                _minimumReturn
+            );
     }
 
     /* ============ User ============ */
 
     /**
      * @dev Creates new token for holder by converting _investmentToken value to LimaToken
+     * Note: User need to approve _amount on _investmentToken to this contract
+     * @param _investmentToken The address of token to invest with.
+     * @param _amount The amount of investment token to create lima token from.
+     * @param _recipient The address to transfer the lima token to.
+     * @param _minimumReturn The minimum amount to return or else revert.
      */
-    //User needs to approve _investmentToken to contract  ??
     function create(
-        IERC20 _investmentToken,
+        address _investmentToken,
         uint256 _amount,
-        address _holder
-    ) external returns (bool) {
-        uint256 balancePerToken = getUnderlyingTokenBalancePerToken();
-        require(balancePerToken != 0, "balancePerToken must not be zero");
+        address _recipient,
+        uint256 _minimumReturn
+    )
+        external
+        onlyInvestmentToken(_investmentToken)
+        onlyAmunUsers
+        onlyNotRebalancing
+        returns (bool)
+    {
+        uint256 balance = getUnderlyingTokenBalance();
 
-        _investmentToken.safeTransferFrom(msg.sender, address(this), _amount);
-
-        //swap to currentUnderlyingToken, when not inkind
-        _amount = _swap(
-            _investmentToken,
-            IERC20(currentUnderlyingToken),
+        IERC20(_investmentToken).safeTransferFrom(
+            msg.sender,
+            address(this),
             _amount
         );
-        //todo check amount?
-        _mint(_holder, _amount.div(balancePerToken));
-
-        require(
-            balancePerToken == getUnderlyingTokenBalancePerToken(),
-            "Create should not change balance per token."
+        //get fee
+        uint256 fee = limaTokenHelper.getFee(
+            _amount,
+            limaTokenHelper.mintFee()
         );
+        if (fee > 0) {
+            IERC20(_investmentToken).safeTransfer(
+                limaTokenHelper.feeWallet(),
+                fee
+            );
+            _amount = _amount - fee;
+        }
+        _amount = _swap(
+            _investmentToken,
+            limaTokenHelper.currentUnderlyingToken(),
+            _amount,
+            _minimumReturn
+        );
+        _amount = totalSupply().mul(_amount).div(balance);
+        require(_amount > 0, "zero");
+
+        _mint(_recipient, _amount);
+
+        emit Create(msg.sender, _amount);
+        return true;
+    }
+
+    function _redeem(
+        address _investor,
+        address _payoutToken,
+        uint256 _amount,
+        address _recipient,
+        uint256 _minimumReturn
+    )
+        internal
+        onlyInvestmentToken(_payoutToken)
+        onlyNotRebalancing
+        returns (bool)
+    {
+        uint256 underlyingAmount = getUnderlyingTokenBalanceOf(_amount);
+        _burn(_investor, _amount);
+
+        uint256 fee = limaTokenHelper.getFee(
+            underlyingAmount,
+            limaTokenHelper.burnFee()
+        );
+        if (fee > 0) {
+            _unwrap(
+                limaTokenHelper.currentUnderlyingToken(),
+                fee,
+                limaTokenHelper.feeWallet()
+            );
+            underlyingAmount = underlyingAmount - fee;
+        }
+        emit Redeem(msg.sender, _amount);
+
+        _amount = _swap(
+            limaTokenHelper.currentUnderlyingToken(),
+            _payoutToken,
+            underlyingAmount,
+            _minimumReturn
+        );
+        require(_amount > 0, "zero");
+        IERC20(_payoutToken).safeTransfer(_recipient, _amount);
+
         return true;
     }
 
     /**
      * @dev Redeem the value of LimaToken in _payoutToken.
+     * @param _payoutToken The address of token to payout with.
+     * @param _amount The amount of lima token to redeem.
+     * @param _recipient The address to transfer the payout token to.
+     * @param _minimumReturn The minimum amount to return or else revert.
      */
     function redeem(
-        IERC20 _payoutToken,
+        address _payoutToken,
         uint256 _amount,
-        address _holder
+        address _recipient,
+        uint256 _minimumReturn
     ) external returns (bool) {
-        uint256 balancePerToken = getUnderlyingTokenBalancePerToken();
-        require(balancePerToken != 0, "balancePerToken must not be zero");
-
-        _burn(msg.sender, _amount);
-        _amount = balancePerToken.mul(_amount);
-
-        //swap from currentUnderlyingToken to _payoutToken, when not inkind
-        _amount = _swap(IERC20(currentUnderlyingToken), _payoutToken, _amount);
-        //todo check amount?
-
-        _payoutToken.safeTransfer(_holder, _amount);
-        require(
-            balancePerToken == getUnderlyingTokenBalancePerToken(),
-            "Redeem should not change balance per token."
-        );
-
-        return true;
+        return
+            _redeem(
+                msg.sender,
+                _payoutToken,
+                _amount,
+                _recipient,
+                _minimumReturn
+            );
     }
 }

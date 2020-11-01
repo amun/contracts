@@ -1,8 +1,8 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.6;
 
 
 // import "@openzeppelin/upgrades/contracts/Initializable.sol";
-import {ContextUpgradeSafe, Initializable} from "@openzeppelin/contracts-ethereum-package/contracts/GSN/Context.sol";
+import { Initializable} from "@openzeppelin/contracts-ethereum-package/contracts/GSN/Context.sol";
 
 /**
  * @dev Contract module which provides a basic access control mechanism, where
@@ -16,7 +16,7 @@ import {ContextUpgradeSafe, Initializable} from "@openzeppelin/contracts-ethereu
  * `onlyLimaManager`, which can be applied to your functions to restrict their use to
  * the limaManager.
  */
-contract OwnableLimaManager is Initializable, ContextUpgradeSafe {
+contract OwnableLimaManager is Initializable {
     address private _limaManager;
 
     event LimaManagerOwnershipTransferred(address indexed previousLimaManager, address indexed newLimaManager);
@@ -25,15 +25,8 @@ contract OwnableLimaManager is Initializable, ContextUpgradeSafe {
      * @dev Initializes the contract setting the deployer as the initial limaManager.
      */
 
-    function __OwnableLimaManager_init() internal initializer {
-        __Context_init_unchained();
-        __OwnableLimaManager_init_unchained();
-    }
-
     function __OwnableLimaManager_init_unchained() internal initializer {
-
-
-        address msgSender = _msgSender();
+        address msgSender = msg.sender;
         _limaManager = msgSender;
         emit LimaManagerOwnershipTransferred(address(0), msgSender);
 
@@ -51,20 +44,8 @@ contract OwnableLimaManager is Initializable, ContextUpgradeSafe {
      * @dev Throws if called by any account other than the limaManager.
      */
     modifier onlyLimaManager() {
-        require(_limaManager == _msgSender(), "OwnableLimaManager: caller is not the limaManager");
+        require(_limaManager == msg.sender, "OwnableLimaManager: caller is not the limaManager");
         _;
-    }
-
-    /**
-     * @dev Leaves the contract without limaManager. It will not be possible to call
-     * `onlyLimaManager` functions anymore. Can only be called by the current limaManager.
-     *
-     * NOTE: Renouncing limaManagership will leave the contract without an limaManager,
-     * thereby removing any functionality that is only available to the limaManager.
-     */
-    function renounceLimaManagerOwnership() public virtual onlyLimaManager {
-        emit LimaManagerOwnershipTransferred(_limaManager, address(0));
-        _limaManager = address(0);
     }
 
     /**
@@ -77,5 +58,4 @@ contract OwnableLimaManager is Initializable, ContextUpgradeSafe {
         _limaManager = newLimaManager;
     }
 
-    uint256[49] private __gap;
 }

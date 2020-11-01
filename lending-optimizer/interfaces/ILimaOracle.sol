@@ -1,4 +1,4 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.6;
 
 interface ILimaOracle {
     function fetchBestTokenAPR()
@@ -8,5 +8,11 @@ interface ILimaOracle {
             uint8,
             address,
             address
+        );
+
+    function requestDeliveryStatus(address _receiver)
+        external 
+        returns  (
+            bytes32 requestId
         );
 }

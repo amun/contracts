@@ -1,12 +1,6 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.6;
 
 
-/**
- * @title AddressArrayUtils
- * @author Set Protocol
- *
- * Utility functions to handle Address Arrays
- */
 library AddressArrayUtils {
 
     /**
