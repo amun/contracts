@@ -3,48 +3,12 @@ const { expect, use } = require("chai");
 const fs = require("fs");
 const { BigNumber } = require("@ethersproject/bignumber");
 const { advanceTime } = require("./utils/time");
-const {
-  LinkToken: LinkTokenContract,
-} = require("@chainlink/contracts/truffle/v0.4/LinkToken");
-const {
-  Oracle: OracleContract,
-} = require("@chainlink/contracts/truffle/v0.6/Oracle");
-const {
-  initializeChainlinkNode,
-} = require("../scripts/deployTestEnvironmentFunctions");
-const { spawn } = require("child_process");
+const { LinkToken: LinkTokenContract } = require('@chainlink/contracts/truffle/v0.4/LinkToken')
+const { Oracle: OracleContract } = require('@chainlink/contracts/truffle/v0.6/Oracle');
+const { initializeChainlinkNode} = require('../scripts/deployTestEnvironmentFunctions');
+const { spawn } = require('child_process');
+const { packData } = require("./utils/packData");
 use(solidity);
-
-function toUint_8_24_Format(source) {
-  const binaryString = source.toString(2);
-  const shift =
-    BigInt(binaryString.length) > 24n ? BigInt(binaryString.length) - 24n : 0n;
-  const bits24 = source >> shift;
-  const shiftComplement = "0".repeat(2 - shift.toString(16).length);
-  const bitsComplement = "0".repeat(6 - bits24.toString(16).length);
-  return `${shiftComplement}${shift.toString(
-    16
-  )}${bitsComplement}${bits24.toString(16)}`;
-}
-function packData(address, bigint1, bigint2, bigint3) {
-  var numberParam = toUint_8_24_Format(bigint1);
-  var secondNumberParam = toUint_8_24_Format(bigint2);
-  var thirdNumberParam = toUint_8_24_Format(bigint3);
-  return (
-    "0x" +
-    Buffer.from(
-      Uint8Array.from(
-        Buffer.from(
-          numberParam +
-            secondNumberParam +
-            thirdNumberParam +
-            address.replace("0x", ""),
-          "hex"
-        )
-      )
-    ).toString("hex")
-  );
-}
 
 describe("LimaToken", function () {
   let loadFixture;

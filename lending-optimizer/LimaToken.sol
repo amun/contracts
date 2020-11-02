@@ -157,7 +157,6 @@ contract LimaToken is ERC20PausableUpgradeSafe {
 
     /* ============ Lima Manager ============ */
 
-    // functions used in rebalances
     function mint(address account, uint256 amount)
         public
         onlyLimaManagerOrOwner
@@ -174,6 +173,20 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         _unpause();
     }
 
+    function _approveLimaSwap(address _token, uint256 _amount) internal {
+        if (
+            IERC20(_token).allowance(
+                address(this),
+                address(limaTokenHelper.limaSwap())
+            ) < _amount
+        ) {
+            IERC20(_token).safeApprove(
+                address(limaTokenHelper.limaSwap()),
+                limaTokenHelper.MAX_UINT256()
+            );
+        }
+    }
+
     function _swap(
         address _from,
         address _to,
@@ -181,17 +194,8 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         uint256 _minimumReturn
     ) internal returns (uint256 returnAmount) {
         if (address(_from) != address(_to) && _amount > 0) {
-            if (
-                IERC20(_from).allowance(
-                    address(this),
-                    address(limaTokenHelper.limaSwap())
-                ) < _amount
-            ) {
-                IERC20(_from).safeApprove(
-                    address(limaTokenHelper.limaSwap()),
-                    limaTokenHelper.MAX_UINT256()
-                );
-            }
+            _approveLimaSwap(_from, _amount);
+
             returnAmount = limaTokenHelper.limaSwap().swap(
                 address(this),
                 _from,
@@ -209,7 +213,10 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         uint256 _amount,
         address _recipient
     ) internal {
-        limaTokenHelper.limaSwap().unwrap(_token, _amount, _recipient);
+        if (_amount > 0) {
+            _approveLimaSwap(_token, _amount);
+            limaTokenHelper.limaSwap().unwrap(_token, _amount, _recipient);
+        }
     }
 
     function swap(
@@ -237,10 +244,15 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         limaTokenHelper.setLastRebalance(now);
         limaTokenHelper.setIsRebalancing(true);
 
-        IERC20(limaTokenHelper.LINK()).transfer(address( limaTokenHelper.oracle()), 1 * 10**17); // 0.1 LINK
-        
-        limaTokenHelper.oracle().requestDeliveryStatus(address(this));
-        // limaTokenHelper.setRequestId(_requestId);
+        IERC20(limaTokenHelper.LINK()).transfer(
+            address(limaTokenHelper.oracle()),
+            1 * 10**17
+        ); // 0.1 LINK
+
+        bytes32 _requestId = limaTokenHelper.oracle().requestDeliveryStatus(
+            address(this)
+        );
+        limaTokenHelper.setRequestId(_requestId);
         emit RebalanceInit(msg.sender);
         _mint(msg.sender, limaTokenHelper.getPayback(startGas - gasleft()));
     }
@@ -254,17 +266,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         virtual
         onlyRebalancing
     {
-        // require(_requestId == limaTokenHelper.requestId(), "LM11");
-
-        require(msg.sender == address(limaTokenHelper.oracle()), "LM8");
-        // LimaToken: can receive data only from oracle");
-        require(!limaTokenHelper.isOracleDataReturned(), "LM9"); //only after init rebalance
-        // (
-        //   address addr,
-        //   uint256 a,
-        //   uint256 b,
-        //   uint256 c
-        // ) = limaTokenHelper.decodeOracleData(_data);
+        limaTokenHelper.isReceiveOracleData(_requestId, msg.sender);
 
         limaTokenHelper.setOracleData(_data);
 
@@ -278,7 +280,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
      */
     function rebalance() external onlyRebalancing {
         uint256 startGas = gasleft();
-        require(limaTokenHelper.isOracleDataReturned(), "LM8"); //Not ready to execute rebalance
+        require(limaTokenHelper.isOracleDataReturned(), "LM8"); //only rebalance data is returned
 
         (
             address _bestToken,
@@ -288,6 +290,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
             uint256 _minimumReturnLink,
             address _govToken
         ) = limaTokenHelper.getRebalancingData();
+
         //send fee to fee wallet
         _unwrap(
             limaTokenHelper.currentUnderlyingToken(),
@@ -297,7 +300,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
 
         //swap link
         if (_amountToSellForLink != 0) {
-            swap(
+            _swap(
                 limaTokenHelper.currentUnderlyingToken(),
                 limaTokenHelper.LINK(),
                 _amountToSellForLink,
@@ -306,7 +309,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         }
 
         //swap gov
-        swap(
+        _swap(
             _govToken,
             _bestToken,
             IERC20(_govToken).balanceOf(address(this)),
@@ -314,7 +317,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         );
 
         //swap underlying
-        swap(
+        _swap(
             limaTokenHelper.currentUnderlyingToken(),
             _bestToken,
             getUnderlyingTokenBalance(),

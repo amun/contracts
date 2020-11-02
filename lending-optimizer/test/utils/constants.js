@@ -29,6 +29,11 @@ const aDai = "0xfC1E690f61EFd961294b3e1Ce3313fBD8aa4f85d";
 const aUsdc = "0x9bA00D6856a4eDF4665BcA2C2309936572473B7E";
 const aUsdt = "0x71fc860F7D3A592A4a98740e39dB31d25db65ae8";
 
+//governance token 
+const aave = "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9";
+const comp = "0xc00e94Cb662C3520282E6f5717214004A7f26888";
+
+
 // protocols
 const aaveLendingPool = "0x398eC7346DcD622eDc5ae82352F02bE94C62d119";
 const aaveCore = "0x3dfd23A6c5E8BbcFc9581d2E864a68feb6a076d3";
@@ -61,5 +66,7 @@ module.exports = {
   cUsdt,
   aDai,
   aUsdc,
-  aUsdt
+  aUsdt,
+  aave,
+  comp
 };

@@ -115,17 +115,28 @@ contract LimaTokenHelper is LimaTokenStorage, InvestmentToken, AmunUsers {
         //send gas cost
         uint256 gasPayback = (gas + payoutGas).mul(tx.gasprice) +
             rebalanceBonus;
-// 0x922018674c12a7F0D394ebEEf9B58F186CdE13c1.price('ETH');
-        uint256 returnAmount = limaSwap.getExpectedReturn(
-            USDC,
-            currentUnderlyingToken,
-            gasPayback
-        );
+        return gasPayback;
+        //todo
+        // 0x922018674c12a7F0D394ebEEf9B58F186CdE13c1.price('ETH');
+        // uint256 returnAmount = limaSwap.getExpectedReturn(
+        //     USDC,
+        //     currentUnderlyingToken,
+        //     gasPayback
+        // );
 
-        return
-            returnAmount.mul(ILimaToken(limaToken).totalSupply()).div(
-                ILimaToken(limaToken).getUnderlyingTokenBalance()
-            );
+        // return
+        //     gasPayback.mul(ILimaToken(limaToken).totalSupply()).div(
+        //         ILimaToken(limaToken).getUnderlyingTokenBalance()
+        //     );
+    }
+
+    function isReceiveOracleData(bytes32 _requestId, address _msgSender) external view {
+        require(
+            _requestId == requestId &&
+                _msgSender == address(oracle) &&
+                !isOracleDataReturned,
+            "LM11"
+        );
     }
 
     /**

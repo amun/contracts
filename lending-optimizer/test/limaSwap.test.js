@@ -15,6 +15,8 @@ const {
   aDai,
   aUsdc,
   aUsdt,
+  aave,
+  link
 } = require("./utils/constants");
 
 describe("LimaSwap", function () {
@@ -27,7 +29,9 @@ describe("LimaSwap", function () {
     aUsdtContract,
     cDaiContract,
     cUsdcContract,
-    cUsdtContract;
+    cUsdtContract,
+    linkContract,
+    aaveContract
   // contract enum values
   const NOT_FOUND = 0;
   const COMPOUND = 1;
@@ -69,6 +73,10 @@ describe("LimaSwap", function () {
     cDaiContract = await ethers.getContractAt("IERC20", cDai);
     cUsdcContract = await ethers.getContractAt("IERC20", cUsdc);
     cUsdtContract = await ethers.getContractAt("IERC20", cUsdt);
+
+    linkContract = await ethers.getContractAt("IERC20", link);
+    aaveContract = await ethers.getContractAt("IERC20", aave);
+
     const maxUint = await limaSwap.MAX_UINT256();
 
     await daiContract.approve(limaSwap.address, maxUint);
@@ -82,6 +90,9 @@ describe("LimaSwap", function () {
     await aUsdtContract.approve(limaSwap.address, maxUint);
     await aUsdcContract.approve(limaSwap.address, maxUint);
     await aDaiContract.approve(limaSwap.address, maxUint);
+
+    await linkContract.approve(limaSwap.address, maxUint);
+    await aaveContract.approve(limaSwap.address, maxUint);
   }
 
   describe("#initialize", function () {
@@ -647,6 +658,24 @@ describe("LimaSwap", function () {
       await limaSwap.swap(user2, aDai, usdc, 1e+14, 0);
       expect(await usdcContract.balanceOf(user2)).to.be.above(currentUSDCBalance);
     });
+
+    it("swaps AAVE to aUsdt", async () => {
+      const currentAUsdtBalanceT = await aUsdtContract.balanceOf(user2);
+      await limaSwap.swap(user2, aave, aUsdt, 10, 0);
+      expect(await aUsdtContract.balanceOf(user2)).to.be.above(
+        currentAUsdtBalanceT
+      );
+    });
+    
+    it("swaps aDai to LINK", async () => {
+      await limaSwap.swap(owner, dai, aDai, 1e+14, 0);
+
+      const currentLinkBalanceT = await linkContract.balanceOf(user2);
+      await limaSwap.swap(user2, aDai, link, 1e+14, 0);
+      expect(await linkContract.balanceOf(user2)).to.be.above(
+        currentLinkBalanceT
+      );
+    });
   });
 
   describe("#unwrap", function () {
@@ -697,5 +726,9 @@ describe("LimaSwap", function () {
       await limaSwap.unwrap(aUsdt, 10, user2);
       expect(await usdtContract.balanceOf(user2)).to.be.above(currentBalance);
     });
+
+
+
+
   });
 });
