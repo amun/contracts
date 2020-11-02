@@ -14,6 +14,7 @@ contract LimaOracle is ChainlinkClient {
     address public oracle;
     bytes32 public jobId;
     uint256 private fee;
+    string private uri;
 
     mapping(bytes32 => ILimaOracleReceiver) public pendingRequests;
 
@@ -21,10 +22,11 @@ contract LimaOracle is ChainlinkClient {
      * @notice Deploy the contract with a specified address for the LINK
      * and Oracle contract addresses
      */
-    constructor(address _oracle, address link, bytes32 _jobId) public {
+    constructor(address _oracle, address link, bytes32 _jobId, string memory _uri) public {
         oracle = _oracle;
         fee = LINK / 10; // 0.1 LINK
         jobId = _jobId;
+        uri = _uri;
         setChainlinkToken(link);
     }
 
@@ -39,7 +41,7 @@ contract LimaOracle is ChainlinkClient {
         //Set the URL to perform the GET request on
         req.add(
             "get",
-            "https://oracle-staging.amun.com/best-lending-pool" //://172.17.0.1:3060/best-lending-pool" //
+            uri
         );
 
         //Set the path to find the desired data in the API response, where the response format is:

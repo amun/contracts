@@ -3,10 +3,11 @@ const { expect, use } = require("chai");
 const fs = require("fs");
 const { BigNumber } = require("@ethersproject/bignumber");
 const { advanceTime } = require("./utils/time");
+
+const { spawnSync } = require("child_process");
 const { LinkToken: LinkTokenContract } = require('@chainlink/contracts/truffle/v0.4/LinkToken')
 const { Oracle: OracleContract } = require('@chainlink/contracts/truffle/v0.6/Oracle');
 const { initializeChainlinkNode} = require('../scripts/deployTestEnvironmentFunctions');
-const { spawn } = require('child_process');
 const { packData } = require("./utils/packData");
 use(solidity);
 
@@ -35,7 +36,9 @@ describe("LimaToken", function () {
     limaOracle,
     unwrappedToken,
     TokenHelperContract,
-    tokenHelper;
+    tokenHelper,
+    oracleAddresses,
+    LimaOracleContract;
   const zero = "0";
   const one = ethers.utils.parseEther("1");
   const two = ethers.utils.parseEther("2");
@@ -216,17 +219,19 @@ describe("LimaToken", function () {
       underlyingToken2.address,
       underlyingToken3.address,
     ];
-    const oracleAddresses = fs
+    oracleAddresses = fs
       .readFileSync("./build/addrs.env", "utf-8")
       .split("\n")
       .map((x) => x.split("="))
       .reduce((prev, [key, value]) => ((prev[key] = value), prev), {});
     const jobId = fs.readFileSync("./build/jobs.env", "utf-8").split("=")[1];
-    var LimaOracleContract = await ethers.getContractFactory("LimaOracle");
+    LimaOracleContract = await ethers.getContractFactory("LimaOracle");
     limaOracle = await LimaOracleContract.deploy(
       oracleAddresses.ORACLE_CONTRACT_ADDRESS,
       oracleAddresses.LINK_CONTRACT_ADDRESS,
-      ethers.utils.hexlify(ethers.utils.toUtf8Bytes(jobId))
+      ethers.utils.hexlify(ethers.utils.toUtf8Bytes(jobId)),
+      //"https://oracle-staging.amun.com/best-lending-pool"
+      "http://172.17.0.1:3060/best-lending-pool" //?force_address=0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9
     );
     oracle = new ethers.Contract(
       oracleAddresses.ORACLE_CONTRACT_ADDRESS,
@@ -588,20 +593,31 @@ describe("LimaToken", function () {
   describe("#receiveOracleData", function () {
     beforeEach(async () => {
       console.log("Shutting down chainlink service");
-      const stopChainlink = spawn("docker-compose", ["down", "chainlink"]);
-      const rmChainlink = spawn("docker-compose", ["rm", "chainlink"]);
-      const stopDb = spawn("docker-compose", ["down", "db"]);
-      const rmDb = spawn("docker-compose", ["rm", "db"]);
-      const startDb = spawn("docker-compose", ["start", "db"]);
+      const stopChainlink = spawnSync("docker-compose", ["stop", "chainlink"]);
+      const rmChainlink = spawnSync("docker-compose", ["rm", "-f", "chainlink"]);
+      const stopDb = spawnSync("docker-compose", ["stop", "dbchainlink"]);
+      const rmDb = spawnSync("docker-compose", ["rm", "-f", "dbchainlink"]);
+      const startDb = spawnSync("docker-compose", ["up", "-d", "dbchainlink"]);
 
-      await initializeChainlinkNode(oracle, signer);
+      const { jobId } = await initializeChainlinkNode(oracle, signer);
+      const limaOracle = await LimaOracleContract.deploy(
+        oracleAddresses.ORACLE_CONTRACT_ADDRESS,
+        oracleAddresses.LINK_CONTRACT_ADDRESS,
+        ethers.utils.hexlify(ethers.utils.toUtf8Bytes(jobId)),
+        "http://172.17.0.1:3060/best-lending-pool?force_address=0xf650c3d88d12db855b8bf7d11be6c55a4e07dcc9"
+      );
+      await tokenHelper.setLimaOracle(limaOracle.address);
     });
     it("should get requested data", async function () {
-      let result = new Promise(async (resolve, reject) => {
-        const timeout = setTimeout(reject, 10000);
+      let result = new Promise( (resolve, reject) => {
+        const timeout = setTimeout(() => {
+          token.removeAllListeners("ReadyForRebalance");
+          reject();
+        }, 60000);
         token.on("ReadyForRebalance", (...data) => {
           clearTimeout(timeout);
           resolve();
+          token.removeAllListeners("ReadyForRebalance");
         });
       });
       await advanceTime(provider, 24 * 60 * 60); //24 hours
@@ -767,30 +783,6 @@ describe("LimaToken", function () {
       expect(await tokenV2.name()).to.eq("LIMA Token");
       expect(await tokenV2.symbol()).to.eq("LTK");
       expect(await tokenV2.newFunction()).to.eq(1);
-    });
-  });
-  describe("initRebalance", function () {
-    beforeEach(async () => {
-      console.log("Shutting down chainlink service");
-      const stopChainlink = spawn("docker-compose", ["down", "chainlink"]);
-      const rmChainlink = spawn("docker-compose", ["rm", "chainlink"]);
-      const stopDb = spawn("docker-compose", ["down", "db"]);
-      const rmDb = spawn("docker-compose", ["rm", "db"]);
-      const startDb = spawn("docker-compose", ["start", "db"]);
-
-      await initializeChainlinkNode(oracle, signer);
-    });
-    it("should get requested data", async function () {
-      let result = new Promise(async (resolve, reject) => {
-        const timeout = setTimeout(reject, 10000);
-        token.on("ReadyForRebalance", (...data) => {
-          clearTimeout(timeout);
-          resolve();
-        });
-      });
-      await advanceTime(provider, 24 * 60 * 60); //24 hours
-      await token.initRebalance();
-      await result;
     });
   });
 });
