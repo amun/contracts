@@ -53,17 +53,17 @@ contract AddressStorage is OwnableUpgradeSafe {
     mapping(address => TokenType) public tokenTypes;
     mapping(address => address) public interestTokenToUnderlyingStablecoin;
 
-
+    // @dev get ERC20 address for governance token from Compound or AAVE
+    // @param _token ERC20 address
     function getGovernanceToken(address token) public view returns (address) {
         if (lenders[token] == Lender.COMPOUND) {
             return COMP;
-        }
-        if (lenders[token] == Lender.AAVE) {
+        } else if (lenders[token] == Lender.AAVE) {
             return AAVE;
+        } else {
+            return address(0);
         }
-        return address(0);
     }
-
 
     // @dev get interest bearing token information
     // @param _token ERC20 address
