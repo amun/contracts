@@ -1,0 +1,36 @@
+version: '3'
+
+services:
+  ganache:
+    image: trufflesuite/ganache-cli
+    ports:
+      - 8545:8545
+    command:
+      - --fork="https://mainnet.infura.io/v3/${INFURA_KEY}"
+      - --mnemonic="${MNEMONIC}"
+      - --unlock="0x98c63b7b319dfbdf3d811530f2ab9dfe4983af9d"
+      - --defaultBalanceEther="100000"
+  # db used by chainlink node
+  dbchainlink:
+    image: postgres:11.2
+    environment:
+      POSTGRES_PASSWORD: root
+      POSTGRES_USER: root
+      POSTGRES_DB: log
+
+  # off-chain chainlink node responsible for watching new events on Chainlink Contract, for which it executes requested calls
+  chainlink:
+    image: "smartcontract/chainlink"
+    ports:
+      - "6688:6688"
+    volumes:
+      - ./chainlink:/chainlink
+    env_file:
+      - ./chainlink/chainlink-dev.env
+      - ./build/addrs.env
+    environment:
+      - ETH_URL=ws://ganache:8545
+      - DATABASE_URL=postgresql://root:root@dbchainlink:5432/log?sslmode=disable
+    command: local n -p /chainlink/chainlink.pwd -a /chainlink/api.pwd
+    depends_on:
+      - dbchainlink

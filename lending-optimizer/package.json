@@ -1,0 +1,38 @@
+{
+  "name": "lima-contracts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "buidler --network mainnetFork test",
+    "compile": "buidler compile",
+    "start": "mkdir build; touch ./build/addrs.env; dotenv -- cross-var docker-compose up -d; wait-on -c ./wait-on.config.js http://localhost:8545 && docker-compose stop chainlink && node ./node_modules/.bin/buidler run scripts/deployTestEnvironment.js",
+    "ganache:fork": "dotenv -- cross-var ganache-cli --fork https://mainnet.infura.io/v3/%INFURA_KEY% -e 10000000000 --mnemonic \"%MNEMONIC%\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@chainlink/contracts": "0.0.10",
+    "@nomiclabs/buidler": "^1.4.8",
+    "@nomiclabs/buidler-ethers": "^2.0.0",
+    "@nomiclabs/buidler-ganache": "^1.3.3",
+    "@nomiclabs/buidler-waffle": "^2.1.0",
+    "@openzeppelin/buidler-upgrades": "^1.0.1",
+    "@openzeppelin/contracts-ethereum-package": "^3.0.0",
+    "@openzeppelin/test-helpers": "^0.5.6",
+    "chai": "^4.2.0",
+    "chai-bignumber": "^3.0.0",
+    "cross-var": "^1.1.0",
+    "dotenv": "^8.2.0",
+    "dotenv-cli": "^4.0.0",
+    "ethereum-waffle": "^3.1.2",
+    "ethers": "^5.0.8",
+    "ganache-cli": "^6.12.0",
+    "wait-on": "^5.2.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^3.2.0",
+    "shelljs": "^0.8.4"
+  }
+}

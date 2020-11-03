@@ -130,22 +130,16 @@ contract LimaTokenHelper is LimaTokenStorage, InvestmentToken, AmunUsers {
         //     );
     }
 
-    function isReceiveOracleData(bytes32 _requestId, address _msgSender) external view {
-        require(
-            _requestId == requestId &&
-                _msgSender == address(oracle) &&
-                !isOracleDataReturned,
-            "LM11"
-        );
-    }
-
     /**
-     * @dev Return the amount to payback on execute rebalance
+     * @dev Return the amount to mint in LimaToken as payback for user function call
      */
     function getPayback(uint256 gas) external view returns (uint256) {
         return _getPayback(gas);
     }
 
+    /**
+     * @dev Return the performance over the last time interval
+     */
     function getPerformanceFee()
         external
         view
@@ -211,7 +205,7 @@ contract LimaTokenHelper is LimaTokenStorage, InvestmentToken, AmunUsers {
     }
 
     /**
-     * @dev Gets the expecterd returns of a rebalance
+     * @dev Gets the expected returns of a rebalance
      */
     function getExpectedReturnRebalance(
         address _bestToken,
@@ -265,6 +259,15 @@ contract LimaTokenHelper is LimaTokenStorage, InvestmentToken, AmunUsers {
         return uint256(data & 0x00FF_FFFF) << shift;
     }
 
+    /**
+     * @dev Extracts data from oracle payload.
+     * Extrects 4 values (address, number, number, number):
+     * address, which takes last 160 bits of oracle bytes32 data,( it extracts it by mapping bytes32 to uint160, which allows to get rid of other 96 bits)
+     * 3 numbers: 
+     *      1. Shift bits to the right (there is no bit shift opcode in the evm though, so this operation might be more expensive than I thought), so given (one of the three) number has it bits on last (least significant) 32 bits of uint256.
+     *      2. Now I get rid of more significant bits (all on the other 224 bits) by casting to uint32.
+     *      3. Once I have uint32, I have to now split this numbers into two values. One uint8 and one uint24. This uint24 represents the original number, but divided by 2^<uint8_value>, so in other words, original number, but shifted to the right by number of bits, where this number is stored in this uint8 value.
+     */
     function decodeOracleData(bytes32 _data)
         public
         pure
@@ -309,6 +312,18 @@ contract LimaTokenHelper is LimaTokenStorage, InvestmentToken, AmunUsers {
             amountToSellForLink,
             minimumReturnLink,
             limaSwap.getGovernanceToken(currentUnderlyingToken)
+        );
+    }
+
+    function isReceiveOracleData(bytes32 _requestId, address _msgSender)
+        external
+        view
+    {
+        require(
+            _requestId == requestId &&
+                _msgSender == address(oracle) &&
+                !isOracleDataReturned,
+            "LM11"
         );
     }
 }

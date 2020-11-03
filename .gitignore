@@ -1,0 +1,14 @@
+# dotenv environment variables file
+*.env*
+
+node_modules
+
+.bin
+artifacts
+cache
+unknown-*
+flats
+build 
+
+.vscode
+.openzepplin

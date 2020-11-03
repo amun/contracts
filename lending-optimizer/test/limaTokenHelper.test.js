@@ -1,5 +1,7 @@
 const { createFixtureLoader, solidity } = require("ethereum-waffle");
 const { expect, use } = require("chai");
+const { packData } = require("./utils/packData");
+
 use(solidity);
 
 describe("LimaTokenHelper", function () {
@@ -11,8 +13,7 @@ describe("LimaTokenHelper", function () {
     signer3,
     token,
     TokenContract,
-    manager,
-    ManagerContract,
+    limaOracle,
     feeWallet,
     feeWalletAddress;
   let fakeLimaSwap,
@@ -48,10 +49,8 @@ describe("LimaTokenHelper", function () {
   });
 
   async function fixture() {
-    ManagerContract = await ethers.getContractFactory("LimaManager");
-    manager = await upgrades.deployProxy(ManagerContract, [], {
-      initializer: "initialize",
-    });
+    const OracleContract = await ethers.getContractFactory("FakeOracle");
+    limaOracle = await upgrades.deployProxy(OracleContract);
 
     FakeInvestmentTokenContract = await ethers.getContractFactory(
       "FakeInvestmentToken"
@@ -94,7 +93,7 @@ describe("LimaTokenHelper", function () {
     FakeLimaSwapContract = await ethers.getContractFactory("FakeLimaSwap");
     fakeLimaSwap = await upgrades.deployProxy(
       FakeLimaSwapContract,
-      [unwrappedToken.address,govToken.address],
+      [unwrappedToken.address, govToken.address],
       { initializer: "initialize" }
     );
 
@@ -114,7 +113,8 @@ describe("LimaTokenHelper", function () {
         0,
         0,
         0,
-        link.address
+        link.address,
+        limaOracle.address,
       ],
       { initializer: "initialize" }
     );
@@ -130,7 +130,6 @@ describe("LimaTokenHelper", function () {
     await underlyingToken.mint(token.address, five);
     await token.mint(user3, five);
 
-    await tokenHelper.transferLimaManagerOwnership(manager.address);
     await tokenHelper.switchIsOnlyAmunUser();
 
     await tokenHelper.addInvestmentToken(underlyingToken.address);
@@ -139,9 +138,9 @@ describe("LimaTokenHelper", function () {
   }
 
   describe("#initialize", function () {
-    it("adds token LimaManager", async function () {
-      expect(await tokenHelper.limaManager()).to.eq(manager.address);
-    });
+    // it("adds token LimaManager", async function () {
+    //   expect(await tokenHelper.limaManager()).to.eq(manager.address);
+    // });
 
     it("adds token LimaSwap", async function () {
       expect(await tokenHelper.limaSwap()).to.eq(fakeLimaSwap.address);
@@ -244,7 +243,8 @@ describe("LimaTokenHelper", function () {
 
   describe("#setFeeWallet", function () {
     it("allows only owner is set variable", async () => {
-      await expect(tokenHelper.connect(user2).setFeeWallet(user2)).to.be.reverted;
+      await expect(tokenHelper.connect(user2).setFeeWallet(user2)).to.be
+        .reverted;
     });
 
     it("doesn't allow the creation with an empty address", async () => {
@@ -366,8 +366,7 @@ describe("LimaTokenHelper", function () {
   });
   describe("#setPayoutGas", function () {
     it("allows only owner is set variable", async () => {
-      await expect(tokenHelper.connect(user2).setPayoutGas(one)).to.be
-        .reverted;
+      await expect(tokenHelper.connect(user2).setPayoutGas(one)).to.be.reverted;
     });
 
     it("storages new variable", async () => {
@@ -375,56 +374,81 @@ describe("LimaTokenHelper", function () {
       expect(await tokenHelper.payoutGas()).to.eq(one);
     });
   });
-  function toUint_8_24_Format(source) {
-    const binaryString = source.toString(2);
-    const shift = BigInt(binaryString.length) > 24n ? BigInt(binaryString.length) - 24n : 0n;
-    const bits24 = source >> shift;
-    return `${shift.toString(16)}${bits24.toString(16)}`
-  }
-
-  function packData(address, bigint1, bigint2, bigint3) {
-
-    var numberParam = toUint_8_24_Format(bigint1);
-    var secondNumberParam = toUint_8_24_Format(bigint2);
-    var thirdNumberParam = toUint_8_24_Format(bigint3);
-
-    return '0x'+ Buffer.from(Uint8Array.from(Buffer.from(numberParam + secondNumberParam + thirdNumberParam + address.replace('0x', ''), 'hex'))).toString('hex')
-  }
-
   describe("#decodeOracleData", function () {
     it("decodes data properly", async () => {
       const num1 = 2n ** 72n + 2n ** 64n;
-      const num2 = BigInt('123456789012345678901234567890');
-      const num3 = BigInt('0x1fffffffffffff');
-      const callData = packData(
-        link.address,
-        num1,
-        num2,
-        num3
-      )
+      const num2 = BigInt("123456789012345678901234567890");
+      const num3 = BigInt("0x1fffffffffffff");
+      const callData = packData(link.address, num1, num2, num3);
 
       const data = await tokenHelper.decodeOracleData(callData);
 
-      expect((num1 - BigInt(data.a.toString()))).to.be.eq(0n);
-      // expect(num2/(num2 - BigInt(data.b.toString()))).to.satisfy(x => x > 1_000_000_0n);
-      // expect(num3/(num3 - BigInt(data.c.toString()))).to.satisfy(x => x > 1_000_000_0n);
-    });
-  });
-  describe("#setExecuteRebalanceGas", function () {
-    it("allows only owner is set variable", async () => {
-      await expect(tokenHelper.connect(user2).setExecuteRebalanceGas(one)).to.be
-        .reverted;
+      expect(num1 - BigInt(data.a.toString())).to.be.eq(0n);
+      expect(num2 / (num2 - BigInt(data.b.toString()))).to.satisfy(
+        (x) => x > 1_000_000_0n
+      );
+      expect(num3 / (num3 - BigInt(data.c.toString()))).to.satisfy(
+        (x) => x > 1_000_000_0n
+      );
     });
 
-    it("storages new variable", async () => {
-      await tokenHelper.setExecuteRebalanceGas(one);
-      expect(await tokenHelper.executeRebalanceGas()).to.eq(one);
+    it("packed data should be close to original data after unpacking", async function () {
+      const newToken = underlyingToken3.address;
+      const a = ethers.utils.parseEther("100");
+      const b = 1;
+      const c = ethers.utils.parseEther("1000000");
+
+      const callData = packData(
+        newToken,
+        BigInt(a.toString()),
+        BigInt(b.toString()),
+        BigInt(c.toString())
+      );
+      const [newToken2, a2, b2, c2] = await tokenHelper.decodeOracleData(
+        callData
+      );
+
+      expect(newToken).to.be.eq(newToken2);
+      expect(a2).to.be.above(ethers.utils.parseEther("97"));
+      expect(b2).to.be.eq(1);
+      expect(c2).to.be.above(ethers.utils.parseEther("999700"));
+    });
+  });
+  describe("#getRebalancingData", function () {
+    it("packed data should be close to original data after unpacking", async function () {
+      const newToken = underlyingToken3.address;
+      const a = ethers.utils.parseEther("100");
+      const b = 1;
+      const c = ethers.utils.parseEther("1000000");
+
+      const callData = packData(
+        newToken,
+        BigInt(a.toString()),
+        BigInt(b.toString()),
+        BigInt(c.toString())
+      );
+
+      await tokenHelper.setOracleData(callData)
+      const [
+        newToken2,
+        a2,
+        b2,
+        c2,
+        // minimumReturnLink2,
+        // governanceToken2,
+      ] = await tokenHelper.getRebalancingData();
+
+      expect(newToken).to.be.eq(newToken2);
+      expect(a2).to.be.above(ethers.utils.parseEther("97"));
+      expect(b2).to.be.eq(1);
+      expect(c2).to.be.above(ethers.utils.parseEther("999700"));
     });
   });
 
   describe("#getPerformanceFee", function () {
     //todo
   });
+
   describe("#getRebalanceExecutePayback", function () {
     //todo
   });
@@ -440,5 +464,4 @@ describe("LimaTokenHelper", function () {
   describe("#getExpectedReturnCreate", function () {
     //todo
   });
-  
 });

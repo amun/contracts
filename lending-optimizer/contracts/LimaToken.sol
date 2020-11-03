@@ -219,6 +219,9 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         }
     }
 
+    /**
+     * @dev Swaps token to new token  
+     */
     function swap(
         address _from,
         address _to,
@@ -229,7 +232,8 @@ contract LimaToken is ERC20PausableUpgradeSafe {
     }
 
     /**
-     * @dev Rebalances LimaToken
+     * @dev Initilises rebalances proccess and calls oracle
+     * Note: Can be called every 24 h by everyone and will be repayed
      */
     function initRebalance() external onlyNotRebalancing {
         uint256 startGas = gasleft();
@@ -257,10 +261,16 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         _mint(msg.sender, limaTokenHelper.getPayback(startGas - gasleft()));
     }
 
-    //Can a rebalnce be executed by oracle??
     /* ============ Main Functions ============ */
     // response structure: uint8-uint24-uint8-uint24-uint8-uint24-address
 
+    /**
+     * @dev Data Provided by oracle needed for rebalance 
+     * @param _requestId The requestId from oracle.
+     * @param _data The packed data newToken address, minimumReturn for rebalance, 
+     *              minimumReturn on governance token swap, and amount to sell for LINK.
+     *              response structure: uint8-uint24-uint8-uint24-uint8-uint24-address
+     */
     function receiveOracleData(bytes32 _requestId, bytes32 _data)
         public
         virtual
@@ -276,7 +286,10 @@ contract LimaToken is ERC20PausableUpgradeSafe {
     }
 
     /**
-     * @dev Rebalances LimaToken
+     * @dev Rebalances LimaToken 
+     * Will do swaps of potential governancetoken, underlying token to token that provides higher return
+     * Will swap to LINK when needed
+     * Uses data stored by receiveOracleData in getRebalancingData()
      */
     function rebalance() external onlyRebalancing {
         uint256 startGas = gasleft();

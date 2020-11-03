@@ -6,12 +6,6 @@ const { advanceTime } = require("./utils/time");
 const { packData } = require("./utils/packData");
 
 const {
-  LinkToken: LinkTokenContract,
-} = require("@chainlink/contracts/truffle/v0.4/LinkToken");
-const {
-  Oracle: OracleContract,
-} = require("@chainlink/contracts/truffle/v0.6/Oracle");
-const {
   dai,
   usdc,
   usdt,
@@ -24,7 +18,6 @@ const {
   link,
   aave,
 } = require("./utils/constants");
-
 use(solidity);
 
 describe("LimaTokenIntegration", function () {
@@ -383,11 +376,17 @@ describe("LimaTokenIntegration", function () {
       const balanceOfUserAfter = await usdcContract.balanceOf(user);
       const balanceOfTokenAfter = await aUsdtContract.balanceOf(token.address);
 
-      expect(balanceOfUserBefore.add(balancePerTokenBefore)).to.be.eq(
-        balanceOfUserAfter.add(1)
+      expect(balanceOfUserBefore.add(balancePerTokenBefore)).to.be.above(
+        balanceOfUserAfter.sub(10)
       );
-      expect(balanceOfTokenBefore.sub(balancePerTokenBefore)).to.be.eq(
-        balanceOfTokenAfter
+      expect(balanceOfUserBefore.add(balancePerTokenBefore)).to.be.below(
+        balanceOfUserAfter.add(10)
+      );
+      expect(balanceOfTokenBefore.sub(balancePerTokenBefore)).to.be.above(
+        balanceOfTokenAfter.sub(10) 
+      );
+      expect(balanceOfTokenBefore.sub(balancePerTokenBefore)).to.be.below(
+        balanceOfTokenAfter.add(10) 
       );
       expect(await token.balanceOf(user)).to.be.eq(0);
       expect(balancePerTokenBefore).to.be.eq(balancePerTokenAfter);
