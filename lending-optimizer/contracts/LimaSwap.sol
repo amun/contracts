@@ -224,7 +224,7 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
 
     /* ============ Public ============ */
 
-    // @dev used for getting aproximate return from  stable coins or interest bearing tokens to usdt usdc and dai
+    // @dev used for getting aproximate return amount from exchanging stable coins or interest bearing tokens to usdt usdc or dai
     // used to calculate min return amount
     // @param fromToken from ERC20 address
     // @param toToken destination ERC20 address
