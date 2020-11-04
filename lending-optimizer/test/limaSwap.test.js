@@ -32,7 +32,8 @@ describe("LimaSwap", function () {
     cUsdcContract,
     cUsdtContract,
     linkContract,
-    aaveContract
+    compContract,
+    aaveContract;
   // contract enum values
   const NOT_FOUND = 0;
   const COMPOUND = 1;
@@ -77,6 +78,7 @@ describe("LimaSwap", function () {
 
     linkContract = await ethers.getContractAt("IERC20", link);
     aaveContract = await ethers.getContractAt("IERC20", aave);
+    compContract = await ethers.getContractAt("IERC20", comp);
 
     const maxUint = await limaSwap.MAX_UINT256();
 
@@ -94,9 +96,10 @@ describe("LimaSwap", function () {
 
     await linkContract.approve(limaSwap.address, maxUint);
     await aaveContract.approve(limaSwap.address, maxUint);
+    await compContract.approve(limaSwap.address, maxUint);
   }
 
-  describe.skip("#initialize", function () {
+  describe("#initialize", function () {
     it("sets global variables", async () => {
       expect(await limaSwap.aaveLendingPool()).to.eq(aaveLendingPool);
       expect(await limaSwap.aaveCore()).to.eq(aaveCore);
@@ -244,8 +247,8 @@ describe("LimaSwap", function () {
 
   describe("#setNewOneInch", function () {
     it("allows only owner is set variable", async () => {
-      await expect(limaSwap.connect(user2).setNewOneInch(aaveLendingPool)).to
-        .be.reverted;
+      await expect(limaSwap.connect(user2).setNewOneInch(aaveLendingPool)).to.be
+        .reverted;
     });
 
     it("doesn't allow the creation of an empty address", async () => {
@@ -342,19 +345,30 @@ describe("LimaSwap", function () {
     });
   });
 
+  describe("#getExpectedReturn", function () {
+    it("prohibits destination token to be an interest bearing token", async () => {
+      await expect(
+        limaSwap.getExpectedReturn(dai, cDai, 10)
+      ).to.be.revertedWith("destination token is not stable coin");
+    });
+
+    it("gets expected return amount", async () => {
+      await expect(await limaSwap.getExpectedReturn(cUsdc, usdt, 1e+10)).to.exist;
+    });
+  });
+
   describe("#removeLockedErc20", function () {
     beforeEach(async () => {
       await daiContract.transfer(limaSwap.address, 10);
-    })
+    });
 
     it("allows only owner is call function", async () => {
-      await expect(
-        limaSwap.connect(user2).removeLockedErc20(dai, user2, 10)
-      ).to.be.reverted;
+      await expect(limaSwap.connect(user2).removeLockedErc20(dai, user2, 10)).to
+        .be.reverted;
     });
 
     it("removes Erc20 from contract", async () => {
-      const currentDaiBalance = await daiContract.balanceOf(user2)
+      const currentDaiBalance = await daiContract.balanceOf(user2);
       await limaSwap.removeLockedErc20(dai, user2, 10);
       expect(await daiContract.balanceOf(user2)).to.be.above(currentDaiBalance);
     });
@@ -368,9 +382,9 @@ describe("LimaSwap", function () {
 
   describe("#swap", function () {
     it("swaps one stable coin to another", async () => {
-     // to usdc
+      // to usdc
       const currentUSDCBalance = await usdcContract.balanceOf(user2);
-      await limaSwap.swap(user2, dai, usdc, 1e+14, 0);
+      await limaSwap.swap(user2, dai, usdc, 1e14, 0);
       expect(await usdcContract.balanceOf(user2)).to.be.above(
         currentUSDCBalance
       );
@@ -383,7 +397,7 @@ describe("LimaSwap", function () {
 
       // to usdt
       const currentUSDTBalance = await usdtContract.balanceOf(user2);
-      await limaSwap.swap(user2, dai, usdt, 1e+14, 0);
+      await limaSwap.swap(user2, dai, usdt, 1e14, 0);
       expect(await usdtContract.balanceOf(user2)).to.be.above(
         currentUSDTBalance
       );
@@ -397,9 +411,7 @@ describe("LimaSwap", function () {
       // to dai
       const currentDAIBalance = await daiContract.balanceOf(user2);
       await limaSwap.swap(user2, usdc, dai, 10, 0);
-      expect(await daiContract.balanceOf(user2)).to.be.above(
-        currentDAIBalance
-      );
+      expect(await daiContract.balanceOf(user2)).to.be.above(currentDAIBalance);
 
       const currentDAIBalance2 = await daiContract.balanceOf(user2);
       await limaSwap.swap(user2, usdt, dai, 10, 0);
@@ -443,8 +455,10 @@ describe("LimaSwap", function () {
 
       // to swap dai it needs more zer0s
       const currentCdaiBalance = await cDaiContract.balanceOf(user2);
-      await limaSwap.swap(user2, dai, cDai, 1e+12, 0);
-      expect(await cDaiContract.balanceOf(user2)).to.be.above(currentCdaiBalance);
+      await limaSwap.swap(user2, dai, cDai, 1e12, 0);
+      expect(await cDaiContract.balanceOf(user2)).to.be.above(
+        currentCdaiBalance
+      );
     });
 
     //############### non in-kind swaps ###############//
@@ -479,22 +493,20 @@ describe("LimaSwap", function () {
       expect(await cDaiContract.balanceOf(user2)).to.be.above(
         currentCdaiBalance
       );
-
     });
 
     it("swaps DAI to cUSDC", async () => {
       // // keeps reverting whehn swapping DAI to other stable token
       const currentCusdcBalanceT = await cUsdcContract.balanceOf(user2);
-      await limaSwap.swap(user2, dai, cUsdc, 1e+14, 0);
+      await limaSwap.swap(user2, dai, cUsdc, 1e14, 0);
       expect(await cUsdcContract.balanceOf(user2)).to.be.above(
         currentCusdcBalanceT
       );
-
     });
 
     it("swaps DAI to cUSDT", async () => {
       const currentCusdtBalanceT = await cUsdtContract.balanceOf(user2);
-      await limaSwap.swap(user2, dai, cUsdt, 1e+14, 0, { gasLimit: 5000000 });
+      await limaSwap.swap(user2, dai, cUsdt, 1e14, 0, { gasLimit: 5000000 });
       expect(await cUsdtContract.balanceOf(user2)).to.be.above(
         currentCusdtBalanceT
       );
@@ -534,7 +546,7 @@ describe("LimaSwap", function () {
 
     it("swaps DAI to aUSDC", async () => {
       const currentAusdcBalanceT = await aUsdcContract.balanceOf(user2);
-      await limaSwap.swap(user2, dai, aUsdc, 1e+14, 0);
+      await limaSwap.swap(user2, dai, aUsdc, 1e14, 0);
       expect(await aUsdcContract.balanceOf(user2)).to.be.above(
         currentAusdcBalanceT
       );
@@ -542,7 +554,7 @@ describe("LimaSwap", function () {
 
     it("swaps DAI to aUSDT", async () => {
       const currentAusdtBalanceT = await aUsdtContract.balanceOf(user2);
-      await limaSwap.swap(user2, dai, aUsdt, 1e+14, 0, { gasLimit: 5000000 });
+      await limaSwap.swap(user2, dai, aUsdt, 1e14, 0, { gasLimit: 5000000 });
       expect(await aUsdtContract.balanceOf(user2)).to.be.above(
         currentAusdtBalanceT
       );
@@ -589,11 +601,10 @@ describe("LimaSwap", function () {
     });
 
     it("swaps cDAI to DAI", async () => {
-      await limaSwap.swap(owner, dai, cDai, 1e+12, 0);
+      await limaSwap.swap(owner, dai, cDai, 1e12, 0);
       const currentDaiBalance = await daiContract.balanceOf(user2);
       await limaSwap.swap(user2, cDai, dai, 100, 0);
       expect(await daiContract.balanceOf(user2)).to.be.above(currentDaiBalance);
-
     });
 
     it("swaps aDAI to DAI", async () => {
@@ -601,7 +612,9 @@ describe("LimaSwap", function () {
 
       const currentDaiBalanceT = await daiContract.balanceOf(user2);
       await limaSwap.swap(user2, aDai, dai, 10, 0);
-      expect(await daiContract.balanceOf(user2)).to.be.above(currentDaiBalanceT);
+      expect(await daiContract.balanceOf(user2)).to.be.above(
+        currentDaiBalanceT
+      );
     });
 
     it("swaps cUSDC to USDT", async () => {
@@ -619,9 +632,7 @@ describe("LimaSwap", function () {
 
       const currentBalance = await daiContract.balanceOf(user2);
       await limaSwap.swap(user2, aUsdc, dai, 100000, 0);
-      expect(await daiContract.balanceOf(user2)).to.be.above(
-        currentBalance
-      );
+      expect(await daiContract.balanceOf(user2)).to.be.above(currentBalance);
     });
 
     it("swaps aUSDT to DAI", async () => {
@@ -629,9 +640,7 @@ describe("LimaSwap", function () {
 
       const currentDBalance = await daiContract.balanceOf(user2);
       await limaSwap.swap(user2, cUsdt, dai, 20000, 0);
-      expect(await daiContract.balanceOf(user2)).to.be.above(
-        currentDBalance
-      );
+      expect(await daiContract.balanceOf(user2)).to.be.above(currentDBalance);
     });
 
     it("swaps aUSDT to USDC", async () => {
@@ -645,41 +654,47 @@ describe("LimaSwap", function () {
     });
 
     it("swaps aDAI to USDT", async () => {
-      await limaSwap.swap(owner, dai, cDai, 1e+14, 0);
+      await limaSwap.swap(owner, dai, cDai, 1e14, 0);
 
       const currentUSDTBalance = await usdtContract.balanceOf(user2);
       await limaSwap.swap(user2, cDai, usdt, 24000, 0);
-      expect(await usdtContract.balanceOf(user2)).to.be.above(currentUSDTBalance);
-
+      expect(await usdtContract.balanceOf(user2)).to.be.above(
+        currentUSDTBalance
+      );
     });
 
     it("swaps aDAI to USDC", async () => {
-      await limaSwap.swap(owner, dai, aDai, 1e+14, 0);
+      await limaSwap.swap(owner, dai, aDai, 1e14, 0);
 
       const currentUSDCBalance = await usdcContract.balanceOf(user2);
-      await limaSwap.swap(user2, aDai, usdc, 1e+14, 0);
-      expect(await usdcContract.balanceOf(user2)).to.be.above(currentUSDCBalance);
+      await limaSwap.swap(user2, aDai, usdc, 1e14, 0);
+      expect(await usdcContract.balanceOf(user2)).to.be.above(
+        currentUSDCBalance
+      );
     });
 
-    it.skip("swaps AAVE to aUsdt", async () => {
+    it("swaps AAVE to aUsdt", async () => {
       const currentAUsdtBalanceT = await aUsdtContract.balanceOf(user2);
+
       await limaSwap.swap(user2, aave, aUsdt, 10, 0);
       expect(await aUsdtContract.balanceOf(user2)).to.be.above(
         currentAUsdtBalanceT
       );
     });
 
-    it.skip("swaps COMP to aUsdt", async () => {
+    it("swaps COMP to aUsdt", async () => {
       const currentAUsdtBalanceT = await aUsdtContract.balanceOf(user2);
+
       await limaSwap.swap(user2, comp, aUsdt, 10, 0);
       expect(await aUsdtContract.balanceOf(user2)).to.be.above(
         currentAUsdtBalanceT
       );
     });
-    
-    it.skip("swaps aDai to LINK", async () => {
+
+    it("swaps aDai to LINK", async () => {
       await limaSwap.swap(owner, dai, aDai, 1e+14, 0);
       const currentLinkBalanceT = await linkContract.balanceOf(user2);
+
       await limaSwap.swap(user2, aDai, link, 1e+14, 0);
       expect(await linkContract.balanceOf(user2)).to.be.above(
         currentLinkBalanceT
@@ -689,13 +704,13 @@ describe("LimaSwap", function () {
 
   describe("#unwrap", function () {
     it("can only unwrap an interest bearing token", async () => {
-      await expect(
-        limaSwap.unwrap(dai, 1e+14, user2)
-      ).to.be.revertedWith('not an interest bearing token');
+      await expect(limaSwap.unwrap(dai, 1e14, user2)).to.be.revertedWith(
+        "not an interest bearing token"
+      );
     });
 
     it("unwraps cDai ", async () => {
-      await limaSwap.swap(owner, dai, cDai, 1e+12, 0);
+      await limaSwap.swap(owner, dai, cDai, 1e12, 0);
       const currentDaiBalance = await daiContract.balanceOf(user2);
       await limaSwap.unwrap(cDai, 100, user2);
       expect(await daiContract.balanceOf(user2)).to.be.above(currentDaiBalance);
@@ -716,7 +731,7 @@ describe("LimaSwap", function () {
     });
 
     it("unwraps aDai", async () => {
-      await limaSwap.swap(owner, dai, aDai, 1e+12, 0);
+      await limaSwap.swap(owner, dai, aDai, 1e12, 0);
       const currentDaiBalance = await daiContract.balanceOf(user2);
       await limaSwap.unwrap(aDai, 10, user2);
       expect(await daiContract.balanceOf(user2)).to.be.above(currentDaiBalance);
@@ -735,6 +750,5 @@ describe("LimaSwap", function () {
       await limaSwap.unwrap(aUsdt, 10, user2);
       expect(await usdtContract.balanceOf(user2)).to.be.above(currentBalance);
     });
-
   });
 });

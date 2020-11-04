@@ -21,6 +21,7 @@ import {Aave} from "./interfaces/Aave.sol";
 import {AToken} from "./interfaces/AToken.sol";
 import {ICurve} from "./interfaces/ICurve.sol";
 import {IOneSplit} from "./interfaces/IOneSplit.sol";
+import {CToken} from "./interfaces/CToken.sol";
 
 contract AddressStorage is OwnableUpgradeSafe {
     enum Lender {NOT_FOUND, COMPOUND, AAVE}
@@ -223,7 +224,8 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
 
     /* ============ Public ============ */
 
-    // @dev only used for stable coins usdt usdc and dai
+    // @dev used for getting aproximate return from  stable coins or interest bearing tokens to usdt usdc and dai
+    // used to calculate min return amount
     // @param fromToken from ERC20 address
     // @param toToken destination ERC20 address
     // @param amount Number in fromToken
@@ -232,11 +234,29 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         address toToken,
         uint256 amount
     ) public view returns (uint256 returnAmount) {
+        require(
+            tokenTypes[toToken] == TokenType.STABLE_COIN,
+            "destination token is not stable coin"
+        );
+
+        if (
+            tokenTypes[fromToken] == TokenType.INTEREST_TOKEN &&
+            lenders[fromToken] == Lender.COMPOUND
+        ) {
+            uint256 compoundRate = CToken(fromToken).exchangeRateStored();
+            amount = amount.mul(compoundRate).div(1e18);
+            fromToken = interestTokenToUnderlyingStablecoin[fromToken];
+        } else if (
+            tokenTypes[fromToken] == TokenType.INTEREST_TOKEN &&
+            lenders[fromToken] == Lender.AAVE
+        ) {
+            fromToken = interestTokenToUnderlyingStablecoin[fromToken];
+        }
+
         (int128 i, int128 j) = _calculateCurveSelector(
             IERC20(fromToken),
             IERC20(toToken)
         );
-
         returnAmount = ICurve(curve).get_dy_underlying(i, j, amount);
     }
 
@@ -278,6 +298,8 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
             tokenTypes[from] == TokenType.NOT_FOUND ||
             tokenTypes[to] == TokenType.NOT_FOUND
         ) {
+            IERC20(from).safeApprove(oneInchPortal, amount);
+
             (uint256 retAmount, uint256[] memory distribution) = IOneSplit(
                 oneInchPortal
             )
