@@ -66,10 +66,7 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
     uint256 public payoutGas;
 
     uint256 public minimumReturnLink;
-
-    uint256 newToken;
-    uint256 minimumReturn;
-    uint256 minimumReturnGov;
+   
     uint256 amountToSellForLink;
 
     /**
