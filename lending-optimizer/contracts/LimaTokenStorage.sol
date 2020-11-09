@@ -1,4 +1,4 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.12;
 
 import {
     ERC20PausableUpgradeSafe,
@@ -34,7 +34,7 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
     address public constant USDC = address(
         0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
     );
-    address public LINK; // = address(0x514910771AF9Ca656af840dff83E8264EcF986CA);
+    address public LINK; 
 
     // List of UnderlyingTokens
     address[] public underlyingTokens;

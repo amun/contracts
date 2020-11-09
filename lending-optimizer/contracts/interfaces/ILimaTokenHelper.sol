@@ -1,4 +1,4 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.12;
 
 import {ILimaTokenStorage} from "./ILimaTokenStorage.sol";
 import {IInvestmentToken} from "./IInvestmentToken.sol";

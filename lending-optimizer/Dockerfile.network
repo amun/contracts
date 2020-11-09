@@ -1,0 +1,7 @@
+FROM node:14
+WORKDIR /app
+RUN npm i hardhat
+COPY ./hardhat.config.js .
+EXPOSE 8545
+ENTRYPOINT ["/bin/sh"]
+CMD ["-c", "node ./node_modules/.bin/hardhat node"]

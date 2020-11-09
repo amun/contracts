@@ -65,16 +65,21 @@ async function deployChainlinkContracts(signer, env) {
   var oracleContract = await env.waffle.deployContract(signer, OracleContract, [linkContract.address]);
   console.log('Deployed oracle');
   fs.writeFileSync('./build/addrs.env', `LINK_CONTRACT_ADDRESS=${linkContract.address}\nORACLE_CONTRACT_ADDRESS=${oracleContract.address}`);
+
+
   return { oracleContract, linkContract };
 }
 
 async function startChainlinkNode(env) {
   console.log('Starting chainlink service');
-  const runChainlink = spawnSync('docker-compose', ['up', '--no-deps', '-d', 'chainlink']);
+
+  if(process.env.RUNTIME_ENV !== 'aws') {
+    const runChainlink = spawnSync('docker-compose', ['up', '--no-deps', '-d', 'chainlink']);
+  }
   
   var opts = {
     resources: [
-      'http://localhost:6688'
+      'http://127.0.0.1:6688'
     ],
     validateStatus: function (status) {
       return status >= 200 && status < 300; // default if not provided

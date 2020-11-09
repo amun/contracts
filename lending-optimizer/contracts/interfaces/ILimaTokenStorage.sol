@@ -1,4 +1,4 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.12;
 
 import {ILimaSwap} from "./ILimaSwap.sol";
 import {ILimaOracle} from "./ILimaOracle.sol";

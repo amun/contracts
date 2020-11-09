@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.6;
+pragma solidity ^0.6.12;
 
 import {
     OwnableUpgradeSafe
@@ -16,11 +16,14 @@ import {
     ReentrancyGuardUpgradeSafe
 } from "@openzeppelin/contracts-ethereum-package/contracts/utils/ReentrancyGuard.sol";
 
+import {
+    IUniswapV2Router02
+} from "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+
 import {Compound} from "./interfaces/Compound.sol";
 import {Aave} from "./interfaces/Aave.sol";
 import {AToken} from "./interfaces/AToken.sol";
 import {ICurve} from "./interfaces/ICurve.sol";
-import {IOneSplit} from "./interfaces/IOneSplit.sol";
 import {CToken} from "./interfaces/CToken.sol";
 
 contract AddressStorage is OwnableUpgradeSafe {
@@ -48,7 +51,6 @@ contract AddressStorage is OwnableUpgradeSafe {
     address public aaveLendingPool;
     address public aaveCore;
     address public curve;
-    address public oneInchPortal;
 
     mapping(address => Lender) public lenders;
     mapping(address => TokenType) public tokenTypes;
@@ -107,12 +109,7 @@ contract AddressStorage is OwnableUpgradeSafe {
         curve = _newCurvePool;
     }
 
-    // @dev set new 1Inch portal
-    // @param _newOneInch Curve pool address
-    function setNewOneInch(address _newOneInch) public onlyOwner {
-        require(_newOneInch != address(0), "new _newOneInch is empty");
-        oneInchPortal = _newOneInch;
-    }
+
 
     // @dev set interest bearing token to its stable coin underlying
     // @param interestToken ERC20 address
@@ -161,6 +158,10 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
     uint256 public constant MAX_UINT256 = 2**256 - 1;
     uint16 public constant aaveCode = 94;
 
+    IUniswapV2Router02 private constant uniswapRouter = IUniswapV2Router02(
+        0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
+    );
+
     event Swapped(address from, address to, uint256 amount, uint256 result);
 
     function initialize() public initializer {
@@ -169,7 +170,6 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         aaveLendingPool = address(0x398eC7346DcD622eDc5ae82352F02bE94C62d119);
         aaveCore = address(0x3dfd23A6c5E8BbcFc9581d2E864a68feb6a076d3);
         curve = address(0x45F783CCE6B7FF23B2ab2D70e416cdb7D6055f51); // yPool
-        oneInchPortal = address(0x11111254369792b2Ca5d084aB5eEA397cA8fa48B); // 1Inch
 
         address cDai = 0x5d3a536E4D6DbD6114cc1Ead35777bAB948E3643;
         address cUsdc = 0x39AA39c021dfbaE8faC545936693aC917d5E7563;
@@ -234,11 +234,10 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         address toToken,
         uint256 amount
     ) public view returns (uint256 returnAmount) {
-        require(
-            tokenTypes[toToken] == TokenType.STABLE_COIN,
-            "destination token is not stable coin"
-        );
+        //get unwrapped token or keep if allready unwrapped
+        toToken = _normalizeToken(toToken);
 
+        //get unwrapped from token and amount
         if (
             tokenTypes[fromToken] == TokenType.INTEREST_TOKEN &&
             lenders[fromToken] == Lender.COMPOUND
@@ -252,12 +251,29 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         ) {
             fromToken = interestTokenToUnderlyingStablecoin[fromToken];
         }
-
-        (int128 i, int128 j) = _calculateCurveSelector(
-            IERC20(fromToken),
-            IERC20(toToken)
-        );
-        returnAmount = ICurve(curve).get_dy_underlying(i, j, amount);
+        //only wrap or unwrap
+        if (toToken == fromToken) {
+            return amount;
+        }
+        if (
+            tokenTypes[toToken] == TokenType.NOT_FOUND ||
+            tokenTypes[fromToken] == TokenType.NOT_FOUND
+        ) {
+            //uniswap
+            returnAmount = _getExpectedReturnUniswap(
+                fromToken,
+                toToken,
+                amount
+            );
+        } else {
+            //curve
+            (int128 i, int128 j) = _calculateCurveSelector(
+                IERC20(fromToken),
+                IERC20(toToken)
+            );
+            returnAmount = ICurve(curve).get_dy_underlying(i, j, amount);
+        }
+        return returnAmount;
     }
 
     // @dev Add function to remove locked tokens that may be sent by users accidently to the contract
@@ -291,44 +307,51 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         uint256 amount,
         uint256 minReturnAmount
     ) public nonReentrant returns (uint256) {
-        uint256 balanceofSwappedtoken;
+        _transferAmountToSwap(from, amount);
+        uint256 amountToTransfer = balanceOfToken(to);
+        address unwrappedFrom = _normalizeToken(from); //unwrapp token to underlying if possible else stay same (aDai => dai, dai => dai, aave => aave)
+        uint256 amountToSwap = amount;
+        if (unwrappedFrom != from) {
+            amountToSwap = balanceOfToken(unwrappedFrom);
+            _unwrap(from);
+            amountToSwap = balanceOfToken(unwrappedFrom).sub(amountToSwap);
+        }
+        address unwrappedTo = _normalizeToken(to);
 
-        // non core swaps
-        if (
-            tokenTypes[from] == TokenType.NOT_FOUND ||
-            tokenTypes[to] == TokenType.NOT_FOUND
-        ) {
-            IERC20(from).safeApprove(oneInchPortal, amount);
-
-            (uint256 retAmount, uint256[] memory distribution) = IOneSplit(
-                oneInchPortal
-            )
-                .getExpectedReturn(IERC20(from), IERC20(to), amount, 1, 0);
-
-            balanceofSwappedtoken = IOneSplit(oneInchPortal).swap(
-                IERC20(from),
-                IERC20(to),
-                amount,
-                retAmount,
-                distribution,
-                0 // flags
-            );
-        } else {
-            // core swaps
-            uint256 returnedAmount = _swapCoreTokens(
-                from,
-                to,
-                amount,
-                minReturnAmount
-            );
-            balanceofSwappedtoken = returnedAmount;
+        if (unwrappedFrom != unwrappedTo) {
+            // non core swaps
+            if (
+                tokenTypes[from] == TokenType.NOT_FOUND ||
+                tokenTypes[to] == TokenType.NOT_FOUND
+            ) {
+                _swapViaUniswap(
+                    unwrappedFrom,
+                    unwrappedTo,
+                    amountToSwap,
+                    minReturnAmount,
+                    address(this)
+                );
+            } else {
+                // core swaps
+                _swapViaCurve(
+                    unwrappedFrom,
+                    unwrappedTo,
+                    amountToSwap,
+                    minReturnAmount
+                );
+            }
         }
 
-        IERC20(to).safeTransfer(recipient, balanceofSwappedtoken);
+        if (unwrappedTo != to) {
+            _wrap(to);
+        }
+        amountToTransfer = balanceOfToken(to).sub(amountToTransfer);
 
-        emit Swapped(from, to, amount, balanceofSwappedtoken);
+        IERC20(to).safeTransfer(recipient, amountToTransfer);
 
-        return balanceofSwappedtoken;
+        emit Swapped(from, to, amount, amountToTransfer);
+
+        return amountToTransfer;
     }
 
     // @dev swap interesting bearing token to its underlying from either AAve or Compound
@@ -340,16 +363,11 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         uint256 amount,
         address recipient
     ) public nonReentrant {
-        (Lender l, TokenType t) = getTokenInfo(interestBearingToken);
+        (, TokenType t) = getTokenInfo(interestBearingToken);
         require(t == TokenType.INTEREST_TOKEN, "not an interest bearing token");
-
         _transferAmountToSwap(interestBearingToken, amount);
-        if (l == Lender.COMPOUND) {
-            _withdrawCompound(interestBearingToken);
-        } else if (l == Lender.AAVE) {
-            _withdrawAave(interestBearingToken);
-        }
 
+        _unwrap(interestBearingToken);
         address u = interestTokenToUnderlyingStablecoin[interestBearingToken];
 
         uint256 balanceofSwappedtoken = balanceOfToken(u);
@@ -357,67 +375,94 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
     }
 
     /* ============ Internal ============ */
-    function _swapCoreTokens(
+
+    function _swapViaCurve(
         address from,
         address to,
         uint256 amount,
-        uint256 minReturnAmount
-    ) internal returns (uint256 balanceofSwappedtoken) {
-        address fromTokencalculatedUnderlyingStablecoin;
+        uint256 minAmountToPreventFrontrunning
+    ) internal {
+        (int128 i, int128 j) = _calculateCurveSelector(
+            IERC20(from),
+            IERC20(to)
+        );
 
-        // from token calculations
-        if (tokenTypes[from] == TokenType.INTEREST_TOKEN) {
-            _transferAmountToSwap(from, amount);
-            if (lenders[from] == Lender.COMPOUND) {
-                _withdrawCompound(from);
-            } else if (lenders[from] == Lender.AAVE) {
-                _withdrawAave(from);
-            }
+        ICurve(curve).exchange_underlying(
+            i,
+            j,
+            amount,
+            minAmountToPreventFrontrunning
+        );
+    }
 
-            fromTokencalculatedUnderlyingStablecoin = interestTokenToUnderlyingStablecoin[from];
-        } else {
-            _transferAmountToSwap(from, amount);
-            fromTokencalculatedUnderlyingStablecoin = from;
+    function _swapViaUniswap(
+        address from,
+        address to,
+        uint256 amount,
+        uint256 minReturnAmount,
+        address recipient
+    ) internal {
+        IERC20(from).safeIncreaseAllowance(address(uniswapRouter), amount);
+
+        address[] memory path = new address[](3);
+        path[0] = from;
+        path[1] = uniswapRouter.WETH();
+        path[2] = to;
+        uniswapRouter.swapExactTokensForTokens(
+            amount,
+            minReturnAmount,
+            path,
+            recipient,
+            block.timestamp + 300
+        );
+    }
+
+    function _getExpectedReturnUniswap(
+        address from,
+        address to,
+        uint256 amount
+    ) internal view returns (uint256) {
+        address[] memory path = new address[](3);
+        path[0] = from;
+        path[1] = uniswapRouter.WETH();
+        path[2] = to;
+        uint256[] memory minOuts = uniswapRouter.getAmountsOut(amount, path);
+        return minOuts[minOuts.length - 1];
+    }
+
+    function _normalizeToken(address token) internal view returns (address) {
+        if (interestTokenToUnderlyingStablecoin[token] == address(0)) {
+            return token;
         }
+        return interestTokenToUnderlyingStablecoin[token];
+    }
 
-        // to token calculations
-        if (tokenTypes[to] == TokenType.STABLE_COIN) {
-            if (fromTokencalculatedUnderlyingStablecoin == to) {
-                balanceofSwappedtoken = balanceOfToken(
-                    fromTokencalculatedUnderlyingStablecoin
-                );
-            } else {
-                _swapViaCurve(
-                    fromTokencalculatedUnderlyingStablecoin,
-                    to,
-                    minReturnAmount
-                );
-                balanceofSwappedtoken = balanceOfToken(to);
+    function _wrap(address interestBearingToken) internal {
+
+            address toTokenStablecoin
+         = interestTokenToUnderlyingStablecoin[interestBearingToken];
+        require(
+            toTokenStablecoin != address(0),
+            "not an interest bearing token"
+        );
+        uint256 balanceToTokenStableCoin = balanceOfToken(toTokenStablecoin);
+        if (balanceToTokenStableCoin > 0) {
+            if (lenders[interestBearingToken] == Lender.COMPOUND) {
+                _supplyCompound(interestBearingToken, balanceToTokenStableCoin);
+            } else if (lenders[interestBearingToken] == Lender.AAVE) {
+                _supplyAave(toTokenStablecoin, balanceToTokenStableCoin);
             }
-        } else {
-            address toTokenStablecoin = interestTokenToUnderlyingStablecoin[to];
+        }
+    }
 
-            if (fromTokencalculatedUnderlyingStablecoin != toTokenStablecoin) {
-                _swapViaCurve(
-                    fromTokencalculatedUnderlyingStablecoin,
-                    toTokenStablecoin,
-                    minReturnAmount
-                );
+    function _unwrap(address interestBearingToken) internal {
+        (Lender l, TokenType t) = getTokenInfo(interestBearingToken);
+        if (t == TokenType.INTEREST_TOKEN) {
+            if (l == Lender.COMPOUND) {
+                _withdrawCompound(interestBearingToken);
+            } else if (l == Lender.AAVE) {
+                _withdrawAave(interestBearingToken);
             }
-
-            uint256 balanceToTokenStableCoin = balanceOfToken(
-                toTokenStablecoin
-            );
-
-            if (balanceToTokenStableCoin > 0) {
-                if (lenders[to] == Lender.COMPOUND) {
-                    _supplyCompound(to, balanceToTokenStableCoin);
-                } else if (lenders[to] == Lender.AAVE) {
-                    _supplyAave(toTokenStablecoin, balanceToTokenStableCoin);
-                }
-            }
-
-            balanceofSwappedtoken = balanceOfToken(to);
         }
     }
 
@@ -448,25 +493,6 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         }
 
         return (i - 1, j - 1);
-    }
-
-    function _swapViaCurve(
-        address from,
-        address to,
-        uint256 minAmountToPreventFrontrunning
-    ) internal {
-        (int128 i, int128 j) = _calculateCurveSelector(
-            IERC20(from),
-            IERC20(to)
-        );
-        uint256 balanceStabletoken = balanceOfToken(from);
-
-        ICurve(curve).exchange_underlying(
-            i,
-            j,
-            balanceStabletoken,
-            minAmountToPreventFrontrunning
-        );
     }
 
     // compound interface functions

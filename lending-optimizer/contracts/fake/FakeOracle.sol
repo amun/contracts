@@ -1,4 +1,4 @@
-pragma solidity ^0.6.6;
+pragma solidity ^0.6.12;
 
 interface ILimaToken {
     function receiveOracleData(bytes32 _requestId, bytes32 _data) external;

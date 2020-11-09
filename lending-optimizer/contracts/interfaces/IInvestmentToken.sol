@@ -1,4 +1,4 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.12;
 
 interface IInvestmentToken {
     function isInvestmentToken(address _investmentToken)

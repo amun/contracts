@@ -7,7 +7,7 @@ usePlugin("@nomiclabs/buidler-waffle");
 module.exports = {
   defaultNetwork: "mainnetFork",
   networks: {
-  
+
     forking: {
       url: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
       blockNumber: 11095000
@@ -21,14 +21,10 @@ module.exports = {
       gasLimit: 20000000,
       fork: `https://mainnet.infura.io/v3/${process.env.INFURA_KEY}`,
       timeout: 200000000
-    },
-    kovan: {
-      url: `https://kovan.infura.io/v3/${process.env.INFURA_KEY}`,
-      accounts: { mnemonic: process.env.MNEMONIC_TESTNET },
-    },
+    }
   },
   solc: {
-    version: "0.6.6",
+    version: "0.6.12",
   },
   mocha: {
     timeout: 200000

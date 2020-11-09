@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.6;
+pragma solidity ^0.6.12;
 
 import {ILimaSwap, IERC20} from "../interfaces/ILimaSwap.sol";
 import {FakeInvestmentToken} from "./FakeInvestmentToken.sol";

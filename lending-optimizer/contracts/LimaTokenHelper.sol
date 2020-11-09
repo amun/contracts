@@ -1,4 +1,4 @@
-pragma solidity ^0.6.2;
+pragma solidity ^0.6.12;
 
 import {
     ERC20PausableUpgradeSafe,
@@ -141,7 +141,7 @@ contract LimaTokenHelper is LimaTokenStorage, InvestmentToken, AmunUsers {
      * @dev Return the performance over the last time interval
      */
     function getPerformanceFee()
-        external
+        public
         view
         returns (uint256 performanceFeeToWallet)
     {
@@ -224,6 +224,7 @@ contract LimaTokenHelper is LimaTokenStorage, InvestmentToken, AmunUsers {
         bool isInUnderlying;
         (tokenPosition, isInUnderlying) = underlyingTokens.indexOf(_bestToken);
         require(isInUnderlying, "LH1");
+
         minimumReturnLink = getExpectedReturn(
             currentUnderlyingToken,
             LINK,
@@ -241,7 +242,7 @@ contract LimaTokenHelper is LimaTokenStorage, InvestmentToken, AmunUsers {
             _bestToken,
             IERC20(currentUnderlyingToken).balanceOf(limaToken).sub(
                 _amountToSellForLink
-            )
+            ).sub(getPerformanceFee())
         );
 
         return (

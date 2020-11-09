@@ -2,14 +2,13 @@ version: '3'
 
 services:
   ganache:
-    image: trufflesuite/ganache-cli
+    build:
+      context: .
+      dockerfile: Dockerfile.network
+    environment:
+      - INFURA_KEY=${INFURA_KEY}
     ports:
       - 8545:8545
-    command:
-      - --fork="https://mainnet.infura.io/v3/${INFURA_KEY}"
-      - --mnemonic="${MNEMONIC}"
-      - --unlock="0x98c63b7b319dfbdf3d811530f2ab9dfe4983af9d"
-      - --defaultBalanceEther="100000"
   # db used by chainlink node
   dbchainlink:
     image: postgres:11.2

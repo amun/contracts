@@ -1,4 +1,4 @@
-pragma solidity >=0.6.6;
+pragma solidity >=0.6.12;
 
 import {ChainlinkClient} from "@chainlink/contracts/src/v0.6/ChainlinkClient.sol";
 import {LinkTokenInterface} from "@chainlink/contracts/src/v0.6/interfaces/LinkTokenInterface.sol";

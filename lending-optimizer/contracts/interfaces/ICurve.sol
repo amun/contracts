@@ -1,4 +1,4 @@
-pragma solidity ^0.6.6;
+pragma solidity ^0.6.12;
 
 interface ICurve {
     // solium-disable-next-line mixedcase

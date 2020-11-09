@@ -1,4 +1,4 @@
-pragma solidity ^0.6.6;
+pragma solidity ^0.6.12;
 
 interface Compound {
     function mint(uint256 mintAmount) external returns (uint256);

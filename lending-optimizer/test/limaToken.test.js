@@ -117,7 +117,6 @@ describe("LimaToken", function () {
       if (BigNumber.from(a).eq(0)) {
         expect(b).to.be.eq(a);
       } else {
-        console.log(BigNumber.from(a).mul(96).div(100).toString())
         expect(BigNumber.from(b).gte(BigNumber.from(a).mul(96).div(100))).to.be
           .true;
 

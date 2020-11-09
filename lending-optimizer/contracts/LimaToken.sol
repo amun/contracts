@@ -1,4 +1,4 @@
-pragma solidity ^0.6.6;
+pragma solidity ^0.6.12;
 
 import {
     ERC20PausableUpgradeSafe,
@@ -12,7 +12,6 @@ import {
 import {AddressArrayUtils} from "./library/AddressArrayUtils.sol";
 
 import {ILimaSwap} from "./interfaces/ILimaSwap.sol";
-import {ILimaManager} from "./interfaces/ILimaManager.sol";
 import {ILimaTokenHelper} from "./interfaces/ILimaTokenHelper.sol";
 import {ILimaOracleReceiver} from "./interfaces/ILimaOracleReceiver.sol";
 import {ILimaOracle} from "./interfaces/ILimaOracle.sol";
