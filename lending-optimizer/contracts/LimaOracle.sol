@@ -45,7 +45,7 @@ contract LimaOracle is ChainlinkClient {
         );
 
         //Set the path to find the desired data in the API response, where the response format is:
-        req.add("path", "address");
+        req.add("path", "packed");
         requestId = sendChainlinkRequestTo(oracle, req, fee);
 
         //Save callback function & receiver

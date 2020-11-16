@@ -8,15 +8,15 @@ import {AddressArrayUtils} from "../library/AddressArrayUtils.sol";
 
 /**
  * @dev Contract module which provides a basic access control mechanism, where
- * there is an account (an limaManager) that can be granted exclusive access to
+ * there is an account (an limaGovernance) that can be granted exclusive access to
  * specific functions.
  *
- * By default, the limaManager account will be the one that deploys the contract. This
- * can later be changed with {transferLimaManagerOwnership}.
+ * By default, the limaGovernance account will be the one that deploys the contract. This
+ * can later be changed with {transferLimaGovernanceOwnership}.
  *
  * This module is used through inheritance. It will make available the modifier
- * `onlyLimaManager`, which can be applied to your functions to restrict their use to
- * the limaManager.
+ * `onlyLimaGovernance`, which can be applied to your functions to restrict their use to
+ * the limaGovernance.
  */
 contract AmunUsers is OwnableUpgradeSafe {
     using AddressArrayUtils for address[];

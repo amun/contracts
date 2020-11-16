@@ -13,7 +13,6 @@ describe("LimaTokenHelper", function () {
     signer3,
     token,
     TokenContract,
-    limaOracle,
     feeWallet,
     feeWalletAddress;
   let fakeLimaSwap,
@@ -23,7 +22,6 @@ describe("LimaTokenHelper", function () {
     underlyingToken3,
     unwrappedToken,
     notUnderlyingToken,
-    link,
     TokenHelperContract,
     tokenHelper;
 
@@ -49,8 +47,6 @@ describe("LimaTokenHelper", function () {
   });
 
   async function fixture() {
-    const OracleContract = await ethers.getContractFactory("FakeOracle");
-    limaOracle = await upgrades.deployProxy(OracleContract);
 
     FakeInvestmentTokenContract = await ethers.getContractFactory(
       "FakeInvestmentToken"
@@ -85,11 +81,7 @@ describe("LimaTokenHelper", function () {
       ["Fake Unwrapped Token", "UWT"],
       { initializer: "initialize" }
     );
-    link = await upgrades.deployProxy(
-      FakeInvestmentTokenContract,
-      ["LINK", "LINK"],
-      { initializer: "initialize" }
-    );
+
     FakeLimaSwapContract = await ethers.getContractFactory("FakeLimaSwap");
     fakeLimaSwap = await upgrades.deployProxy(
       FakeLimaSwapContract,
@@ -112,9 +104,7 @@ describe("LimaTokenHelper", function () {
         underlyingTokens,
         0,
         0,
-        0,
-        link.address,
-        limaOracle.address,
+        0
       ],
       { initializer: "initialize" }
     );
@@ -138,8 +128,8 @@ describe("LimaTokenHelper", function () {
   }
 
   describe("#initialize", function () {
-    // it("adds token LimaManager", async function () {
-    //   expect(await tokenHelper.limaManager()).to.eq(manager.address);
+    // it("adds token LimaGovernance", async function () {
+    //   expect(await tokenHelper.limaGovernance()).to.eq(manager.address);
     // });
 
     it("adds token LimaSwap", async function () {
@@ -353,28 +343,8 @@ describe("LimaTokenHelper", function () {
       expect(await tokenHelper.rebalanceInterval()).to.eq(one);
     });
   });
-  describe("#setRebalanceBonus", function () {
-    it("allows only owner is set variable", async () => {
-      await expect(tokenHelper.connect(user2).setRebalanceBonus(one)).to.be
-        .reverted;
-    });
-
-    it("storages new variable", async () => {
-      await tokenHelper.setRebalanceBonus(one);
-      expect(await tokenHelper.rebalanceBonus()).to.eq(one);
-    });
-  });
-  describe("#setPayoutGas", function () {
-    it("allows only owner is set variable", async () => {
-      await expect(tokenHelper.connect(user2).setPayoutGas(one)).to.be.reverted;
-    });
-
-    it("storages new variable", async () => {
-      await tokenHelper.setPayoutGas(one);
-      expect(await tokenHelper.payoutGas()).to.eq(one);
-    });
-  });
-  describe("#decodeOracleData", function () {
+ 
+  describe.skip("#decodeOracleData", function () {
     it("decodes data properly", async () => {
       const num1 = 2n ** 72n + 2n ** 64n;
       const num2 = BigInt("123456789012345678901234567890");
@@ -414,7 +384,7 @@ describe("LimaTokenHelper", function () {
       expect(c2).to.be.above(ethers.utils.parseEther("999700"));
     });
   });
-  describe("#getRebalancingData", function () {
+  describe.skip("#getRebalancingData", function () {
     it("packed data should be close to original data after unpacking", async function () {
       const newToken = underlyingToken3.address;
       const a = ethers.utils.parseEther("100");
@@ -449,12 +419,6 @@ describe("LimaTokenHelper", function () {
     //todo
   });
 
-  describe("#getRebalanceExecutePayback", function () {
-    //todo
-  });
-  describe("#getRebalancePayback", function () {
-    //todo
-  });
   describe("#getExpectedReturnRebalance", function () {
     //todo
   });

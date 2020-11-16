@@ -25,8 +25,6 @@ describe("LimaToken", function () {
     underlyingToken2,
     underlyingToken3,
     govToken,
-    link,
-    limaOracle,
     unwrappedToken,
     TokenHelperContract,
     tokenHelper;
@@ -79,60 +77,15 @@ describe("LimaToken", function () {
         minimumReturn
       );
   };
-  const rebalance = async (
-    limaToken,
-    newToken,
-    user,
-    amountToSellForLink = 0
-  ) => {
-    await advanceTime(provider, 24 * 60 * 60); //24 hours
+  const rebalance = async (limaToken, newToken, user) => {
+    await advanceTime(provider, 24 * 60 * 60 + 1); //24 hours
 
-    await limaToken.connect(signer2).initRebalance();
-
-    const minimumReturn = 0;
-    //todo test with gov on token
-    const minimumReturnGov = 0;
-    //todo test with real link
-    const rebalanceData = packData(
-      newToken,
-      BigInt(minimumReturn.toString()),
-      BigInt(minimumReturnGov.toString()),
-      BigInt(amountToSellForLink.toString())
+    const minimumReturnGov = await tokenHelper.getExpectedReturnRebalance(
+      newToken
     );
 
-    //calls limatoken receiveOracleData
-    await limaOracle.fakeCallToReceiveOracleData(
-      limaToken.address,
-      rebalanceData
-    );
-    const [
-      newToken2,
-      minimumReturn2,
-      minimumReturnGov2,
-      amountToSellForLink2,
-    ] = await tokenHelper.getRebalancingData();
+    await limaToken.connect(user).rebalance(newToken, minimumReturnGov);
 
-    expect(newToken2).to.be.eq(newToken);
-    const isWithin = (a, b) => {
-      if (BigNumber.from(a).eq(0)) {
-        expect(b).to.be.eq(a);
-      } else {
-        expect(BigNumber.from(b).gte(BigNumber.from(a).mul(96).div(100))).to.be
-          .true;
-
-        expect(BigNumber.from(b).lte(BigNumber.from(a).mul(104).div(100))).to.be
-          .true;
-      }
-    };
-
-    isWithin(minimumReturn, minimumReturn2);
-    isWithin(minimumReturnGov, minimumReturnGov2);
-    isWithin(amountToSellForLink, amountToSellForLink2);
-
-    await limaToken.connect(user).rebalance();
-
-    expect(await tokenHelper.isRebalancing()).to.be.false;
-    expect(await tokenHelper.isOracleDataReturned()).to.be.false;
     expect(await tokenHelper.currentUnderlyingToken()).to.be.eq(newToken);
   };
   let provider;
@@ -188,11 +141,6 @@ describe("LimaToken", function () {
       ["Fake Unwrapped Token", "UWT"],
       { initializer: "initialize" }
     );
-    link = await upgrades.deployProxy(
-      FakeInvestmentTokenContract,
-      ["LINK", "LINK"],
-      { initializer: "initialize" }
-    );
 
     FakeLimaSwapContract = await ethers.getContractFactory("FakeLimaSwap");
     fakeLimaSwap = await upgrades.deployProxy(
@@ -218,8 +166,6 @@ describe("LimaToken", function () {
         0,
         0,
         0,
-        link.address,
-        limaOracle.address,
       ],
       { initializer: "initialize" }
     );
@@ -234,7 +180,6 @@ describe("LimaToken", function () {
 
     await underlyingToken.mint(token.address, five);
     await token.mint(user3, five);
-    await link.mint(token.address, five);
 
     await tokenHelper.switchIsOnlyAmunUser();
 
@@ -253,8 +198,8 @@ describe("LimaToken", function () {
       expect(await token.paused()).to.be.false;
     });
 
-    it.skip("adds token LimaManager", async function () {
-      expect(await tokenHelper.limaManager()).to.eq(manager.address);
+    it.skip("adds token LimaGovernance", async function () {
+      expect(await tokenHelper.limaGovernance()).to.eq(manager.address);
     });
 
     it("adds token LimaSwap", async function () {
@@ -524,82 +469,21 @@ describe("LimaToken", function () {
     });
   });
 
-  describe("#initRebalance", function () {
+  describe("#rebalance", function () {
     it("reverts before 24 hours", async function () {
-      await expect(token.connect(signer2).initRebalance()).to.be.reverted;
+      await expect(token.rebalance(underlyingToken2.address, 0)).to.be.reverted;
     });
     it("works after 24 hours", async function () {
       await advanceTime(provider, 24 * 60 * 60); //24 hours
 
-      await token.connect(signer2).initRebalance(); //first works
-      await expect(token.connect(signer2).initRebalance()).to.be.reverted; //second reverts
+      await token.rebalance(underlyingToken2.address, 0); //first works
+      await expect(token.rebalance(underlyingToken2.address, 0)).to.be.reverted; //second reverts
     });
     it("payback to user works", async function () {
       await advanceTime(provider, 24 * 60 * 60); //24 hours
-      await token.connect(signer2).initRebalance();
-      expect(await token.balanceOf(user2)).to.be.gt(zero);
-      expect(await tokenHelper.isRebalancing()).to.be.true;
-      expect(await tokenHelper.isOracleDataReturned()).to.be.false;
+      await token.rebalance(underlyingToken2.address, 0);
     });
-  });
 
-  describe("#receiveOracleData", function () {
-    it.skip("works after init rebalance", async function () {
-      await advanceTime(provider, 24 * 60 * 60); //24 hours
-      const [
-        bestToken,
-        minimumReturn,
-        minimumReturnGov,
-        amountToSellForLink,
-      ] = await tokenHelper.getExpectedReturnRebalance(
-        underlyingToken2.address,
-        5
-      );
-
-      await token.connect(signer2).initRebalance();
-      expect(await tokenHelper.isRebalancing()).to.be.true;
-      expect(await tokenHelper.isOracleDataReturned()).to.be.false;
-      const rebalanceData = packData(
-        targetCurrency.address,
-        BigInt(minimumReturn.toString()),
-        BigInt(minimumReturnGov.toString()),
-        BigInt(amountToSellForLink.toString())
-      );
-
-      //calls limatoken receiveOracleData
-      await limaOracle.fakeCallToReceiveOracleData(
-        token.address,
-        rebalanceData
-      );
-
-      expect(await tokenHelper.isRebalancing()).to.be.true;
-      expect(await tokenHelper.isOracleDataReturned()).to.be.true;
-    });
-    it.skip("prevents calling setRebalance WITHOUT initRebalance", async function () {
-      await advanceTime(provider, 24 * 60 * 60); //24 hours
-      const [
-        bestToken,
-        minimumReturn,
-        minimumReturnGov,
-        amountToSellForLink,
-      ] = await tokenHelper.getExpectedReturnRebalance(
-        underlyingToken2.address,
-        5
-      );
-      await expect(
-        token
-          .connect(signer2)
-          .receiveOracleData(
-            bestToken,
-            minimumReturn,
-            minimumReturnGov,
-            amountToSellForLink
-          )
-      ).to.be.reverted;
-    });
-  });
-
-  describe("#rebalance", function () {
     it("move all underlying token to new best token", async function () {
       expect(await tokenHelper.currentUnderlyingToken()).to.not.eq(
         underlyingToken3.address
@@ -638,15 +522,8 @@ describe("LimaToken", function () {
       await tokenHelper.setPerformanceFee(10); //1/10 = 10%
       await underlyingToken.mint(token.address, ethers.utils.parseEther("100")); //send 100 for 100% increase
       await rebalance(token, underlyingToken.address, signer);
-     
-      expect(await unwrappedToken.balanceOf(feeWalletAddress)).to.above(
-        ethers.utils.parseEther("9.99")
-      ); //ten); should be ten minus some payback
-    });
 
-    it("sell underlying token for link", async function () {
-      await rebalance(token, underlyingToken.address, signer, five);
-      expect(await link.balanceOf(token.address)).to.above(ten);
+      expect(await unwrappedToken.balanceOf(feeWalletAddress)).to.eq(ten); //should be ten minus some payback
     });
 
     it("sells governance token for underlying token", async function () {
@@ -656,38 +533,14 @@ describe("LimaToken", function () {
       await rebalance(token, underlyingToken.address, signer);
       expect(await govToken.balanceOf(token.address)).to.eq(zero);
     });
+    it("prevents non-owners from using rebalance", async function () {
+      await advanceTime(provider, 24 * 60 * 60 + 1); //24 hours
 
-    it.skip("prevents frontrunning with minimumReturn when using rebalance", async function () {
-      await advanceTime(provider, 24 * 60 * 60); //24 hours
-      const newToken = underlyingToken.address;
-      await tokenHelper.setLink(link.address);
-      await tokenHelper.setLimaOracle(user);
-
-      await tokenHelper.setIsRebalancing(true);
-
-      await tokenHelper.setIsOracleDataReturned(false);
-      const [
-        bestTokenPosition,
-        minimumReturn,
-        minimumReturnGov,
-        minimumReturnLink,
-      ] = await tokenHelper.getExpectedReturnRebalance(
-        underlyingToken.address,
-        5
-      );
-      const rebalanceData = packData(
-        newToken,
-        BigInt(minimumReturn.toString()),
-        BigInt(minimumReturnGov.toString()),
-        BigInt("5")
-      );
-
-      await token.receiveOracleData(
-        ethers.utils.formatBytes32String("fakeId"),
-        rebalanceData
-      );
-
-      await expect(token.connect(signer2).rebalance()).to.be.reverted;
+      await expect(
+        token
+          .connect(signer2)
+          .rebalance(underlyingToken.address, 0)
+      ).to.be.reverted;
     });
   });
   describe("contract upgrade", function () {

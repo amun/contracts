@@ -43,30 +43,14 @@ interface ILimaTokenStorage {
 
     function rebalanceInterval() external view returns (uint256);
 
-    function limaManager() external view returns (address);
+    function limaGovernance() external view returns (address);
 
     function owner() external view returns (address);
-
-    function oracle() external view returns (ILimaOracle);
-
-    function oracleData() external view returns (bytes32);
-
-    function isRebalancing() external view returns (bool);
-
-    function isOracleDataReturned() external view returns (bool);
-
-    function shouldRebalance(
-        uint256 _newToken,
-        uint256 _minimumReturnGov,
-        uint256 _amountToSellForLink
-    ) external view returns (bool);
 
     function governanceToken(uint256 _protocoll)
         external
         view
         returns (address);
-
-    function minimumReturnLink() external view returns (uint256);
 
     /* ============ Setter ============ */
 
@@ -83,8 +67,6 @@ interface ILimaTokenStorage {
 
     function setMintFee(uint256 _mintFee) external;
 
-    function setRequestId(bytes32 _requestId) external;
-
     function setLimaToken(address _limaToken) external;
 
     function setPerformanceFee(uint256 _performanceFee) external;
@@ -98,35 +80,6 @@ interface ILimaTokenStorage {
     function setLimaSwap(address _limaSwap) external;
 
     function setRebalanceInterval(uint256 _rebalanceInterval) external;
-
-    function setOracleData(bytes32 _data) external;
-
-    function setRebalanceGas(uint256 _rebalanceGas) external;
-
-    function setRebalanceBonus(uint256 _rebalanceBonus) external;
-
-    function setIsRebalancing(bool _isRebalancing) external;
-
-    function setIsOracleDataReturned(bool _isOracleDataReturned) external;
-
-    function setRebalanceData(
-        uint256 bestToken,
-        uint256 minimumReturn,
-        uint256 minimumReturnGov,
-        uint256 amountToSellForLink
-    ) external;
-
-    function getRebalancingData()
-        external
-        view
-        returns (
-            address,
-            uint256,
-            uint256,
-            uint256,
-            uint256,
-            address
-        );
 
     /* ============ View ============ */
 

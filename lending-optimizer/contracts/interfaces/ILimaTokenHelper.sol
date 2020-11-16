@@ -39,7 +39,11 @@ interface ILimaTokenHelper is IInvestmentToken, IAmunUser, ILimaTokenStorage {
 
     function getPayback(uint256 gas) external view returns (uint256);
 
-    function isReceiveOracleData(bytes32 _requestId,  address _msgSender) external view;
+    function isReceiveOracleData(bytes32 _requestId, address _msgSender)
+        external
+        view;
+
+    function getGovernanceToken() external view returns (address token);
 
     function getPerformanceFee()
         external

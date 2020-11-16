@@ -12,13 +12,20 @@ contract FakeLimaSwap is ILimaSwap, Initializable {
     address public unwrappedToken;
     address public gov;
 
-    function initialize(address _unwrappedToken, address _gov) public initializer {
+    function initialize(address _unwrappedToken, address _gov)
+        public
+        initializer
+    {
         unwrappedToken = _unwrappedToken;
         gov = _gov;
-
     }
 
-    function getGovernanceToken(address token) external override view returns (address) {
+    function getGovernanceToken(address token)
+        external
+        override
+        view
+        returns (address)
+    {
         return gov;
     }
 
@@ -54,5 +61,12 @@ contract FakeLimaSwap is ILimaSwap, Initializable {
         FakeInvestmentToken(interestBearingToken).burn(msg.sender, amount);
 
         FakeInvestmentToken(unwrappedToken).mint(recipient, amount);
+    }
+
+    function getUnderlyingAmount(address token, uint256 amount)
+        public override
+        returns (uint256 underlyingAmount)
+    {
+        return amount;
     }
 }

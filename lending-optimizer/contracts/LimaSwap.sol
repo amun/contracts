@@ -109,8 +109,6 @@ contract AddressStorage is OwnableUpgradeSafe {
         curve = _newCurvePool;
     }
 
-
-
     // @dev set interest bearing token to its stable coin underlying
     // @param interestToken ERC20 address
     // @param underlyingToken stable coin ERC20 address
@@ -274,6 +272,21 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
             returnAmount = ICurve(curve).get_dy_underlying(i, j, amount);
         }
         return returnAmount;
+    }
+
+    function getUnderlyingAmount(address token, uint256 amount)
+        public
+        returns (uint256 underlyingAmount)
+    {
+        underlyingAmount = amount;
+        if (
+            tokenTypes[token] == TokenType.INTEREST_TOKEN &&
+            lenders[token] == Lender.COMPOUND
+        ) {
+            uint256 compoundRate = CToken(token).exchangeRateStored();
+            underlyingAmount = amount.mul(compoundRate).div(1e18);
+        }
+        return underlyingAmount;
     }
 
     // @dev Add function to remove locked tokens that may be sent by users accidently to the contract
@@ -484,10 +497,10 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
         int128 i = 0;
         int128 j = 0;
         for (uint256 t = 0; t < tokens.length; t++) {
-            if (fromToken == tokens[t]) {
+            if (address(fromToken) == address(tokens[t])) {
                 i = int128(t + 1);
             }
-            if (toToken == tokens[t]) {
+            if (address(toToken) == address(tokens[t])) {
                 j = int128(t + 1);
             }
         }

@@ -3,6 +3,7 @@ usePlugin("@nomiclabs/buidler-ethers");
 usePlugin("@openzeppelin/buidler-upgrades");
 usePlugin("@nomiclabs/buidler-ganache");
 usePlugin("@nomiclabs/buidler-waffle");
+usePlugin("buidler-typechain");
 
 module.exports = {
   defaultNetwork: "mainnetFork",
@@ -28,5 +29,9 @@ module.exports = {
   },
   mocha: {
     timeout: 200000
-  }
+  },
+  typechain: {
+    outDir: "types",
+    target: "web3-v1",
+  },
 };

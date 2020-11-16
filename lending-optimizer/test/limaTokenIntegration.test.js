@@ -15,7 +15,6 @@ const {
   aDai,
   aUsdc,
   aUsdt,
-  link,
   aave,
 } = require("./utils/constants");
 use(solidity);
@@ -33,7 +32,7 @@ describe("LimaTokenIntegration", function () {
     TokenContract,
     feeWallet,
     feeWalletAddress;
-  let limaSwap, LimaSwapContract, limaOracle, TokenHelperContract, tokenHelper;
+  let limaSwap, LimaSwapContract, TokenHelperContract, tokenHelper;
   let daiContract,
     usdcContract,
     usdtContract,
@@ -43,9 +42,7 @@ describe("LimaTokenIntegration", function () {
     cDaiContract,
     cUsdcContract,
     cUsdtContract,
-    linkContract,
     aaveContract;
-
 
   const create = async (limaToken, investmentToken, amount, user) => {
     let minimumReturn = await tokenHelper.getExpectedReturnCreate(
@@ -54,7 +51,8 @@ describe("LimaTokenIntegration", function () {
     );
     if (minimumReturn.gte(1)) {
       minimumReturn = minimumReturn.sub(1); //todo is this correct?
-    }    await limaToken
+    }
+    await limaToken
       .connect(user)
       .create(investmentToken, amount, await user.getAddress(), minimumReturn);
   };
@@ -100,7 +98,6 @@ describe("LimaTokenIntegration", function () {
     cUsdcContract = await ethers.getContractAt("IERC20", cUsdc);
     cUsdtContract = await ethers.getContractAt("IERC20", cUsdt);
 
-    linkContract = await ethers.getContractAt("IERC20", link);
     aaveContract = await ethers.getContractAt("IERC20", aave);
 
     LimaSwapContract = await ethers.getContractFactory("LimaSwap");
@@ -134,9 +131,6 @@ describe("LimaTokenIntegration", function () {
       aDaiContract.address,
     ];
 
-    const OracleContract = await ethers.getContractFactory("FakeOracle");
-    limaOracle = await upgrades.deployProxy(OracleContract);
-
     TokenHelperContract = await ethers.getContractFactory("LimaTokenHelper");
 
     tokenHelper = await upgrades.deployProxy(
@@ -149,8 +143,6 @@ describe("LimaTokenIntegration", function () {
         0,
         0,
         0,
-        link,
-        limaOracle.address,
       ],
       { initializer: "initialize" }
     );
@@ -166,7 +158,7 @@ describe("LimaTokenIntegration", function () {
 
     await token.mint(user3, 1);
 
-    // await tokenHelper.transferLimaManagerOwnership(manager.address);
+    // await tokenHelper.transferLimaGovernanceOwnership(manager.address);
     await tokenHelper.switchIsOnlyAmunUser();
 
     await tokenHelper.addInvestmentToken(daiContract.address);
@@ -174,92 +166,25 @@ describe("LimaTokenIntegration", function () {
     await tokenHelper.addInvestmentToken(usdtContract.address);
   }
   describe("#rebalance", function () {
-    it("rebalance (aUsdt => cUsdc)", async function () {
+    it.only("rebalance (aUsdt => cUsdc)", async function () {
       await limaSwap.swap(token.address, usdt, aUsdt, 90, 0); //the should be 100 now
       //setup
-      const tenEther = ethers.utils.parseEther("10");
 
       await aaveContract.transfer(token.address, 1e14);
 
       const targetCurrency = cUsdcContract;
-      const AAVE = "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9";
 
-      await linkContract.transfer(
-        token.address,
-        ethers.utils.parseEther("0.1")
-      ); //
-      // await link.mint(token.address, tenEther); //make
       await tokenHelper.setPerformanceFee(10); //1/10 = 10%
 
       //revert before 24 hours
-      await expect(token.connect(signer2).initRebalance()).to.be.reverted;
       await advanceTime(provider, 24 * 60 * 60); //24 hours
 
-      await token.initRebalance(); //sets IsRebalancing = true and IsOracleDataReturned = false
 
-      expect(await tokenHelper.isRebalancing()).to.be.true;
-      expect(await tokenHelper.isOracleDataReturned()).to.be.false;
-
-      const balance = await tokenHelper.getUnderlyingTokenBalance();
-      const amountToSellForLink = 5;
-      expect(balance).to.be.above(amountToSellForLink);
-
-      //set this so minimumReturnLink is close above 10
-      let [
-        bestTokenPosition,
-        minimumReturn,
-        minimumReturnGov,
-        minimumReturnLink,
-      ] = await tokenHelper.getExpectedReturnRebalance(
-        targetCurrency.address,
-        amountToSellForLink
+      const minimumReturnGov = await tokenHelper.getExpectedReturnRebalance(
+        targetCurrency.address
       );
+      await token.rebalance(targetCurrency.address, minimumReturnGov);
 
-      if (minimumReturn.gte(1)) {
-        minimumReturn = minimumReturn.sub(1); //todo is this correct?
-      }
-      if (minimumReturnGov.gte(1)) {
-        minimumReturnGov = minimumReturnGov.sub(1);
-      }
-
-      expect(minimumReturnLink).to.be.above(10);
-      const rebalanceData = packData(
-        targetCurrency.address,
-        BigInt(minimumReturn.toString()),
-        BigInt(minimumReturnGov.toString()),
-        BigInt(amountToSellForLink.toString())
-      );
-      //calls limatoken receiveOracleData
-      await limaOracle.fakeCallToReceiveOracleData(
-        token.address,
-        rebalanceData
-      );
-
-      const [
-        newToken2,
-        minimumReturn2,
-        minimumReturnGov2,
-        amountToSellForLink2,
-        minimumReturnLink2,
-        governanceToken2,
-      ] = await tokenHelper.getRebalancingData();
-
-      //tests
-      expect(newToken2).to.be.eq(targetCurrency.address);
-      expect(minimumReturn2).to.be.most(minimumReturn);
-      expect(minimumReturnGov2).to.be.most(minimumReturnGov);
-      expect(amountToSellForLink2.toNumber()).to.be.closeTo(
-        amountToSellForLink,
-        1
-      );
-      expect(minimumReturnLink2).to.be.eq(10);
-      expect(governanceToken2).to.be.eq(AAVE);
-      expect(await aaveContract.balanceOf(token.address)).to.be.eq(1e14);
-      expect(await linkContract.balanceOf(token.address)).to.be.eq(0);
-      await token.connect(signer2).rebalance();
-
-      expect(await tokenHelper.isRebalancing()).to.be.false;
-      expect(await tokenHelper.isOracleDataReturned()).to.be.false;
       expect(await tokenHelper.currentUnderlyingToken()).to.be.eq(
         targetCurrency.address
       );
@@ -267,9 +192,7 @@ describe("LimaTokenIntegration", function () {
       expect(await targetCurrency.balanceOf(token.address)).to.be.above(0);
 
       expect(await aaveContract.balanceOf(token.address)).to.be.eq(0);
-      expect(await linkContract.balanceOf(token.address)).to.be.above(10);
 
-      await expect(token.connect(signer2).initRebalance()).to.be.reverted;
     });
   });
   describe("#create", function () {

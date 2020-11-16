@@ -28,9 +28,9 @@ interface ILimaToken is IERC20 {
     function unpause() external;
     function isPaused() external view returns (bool);
 
-    function limaManager() external view returns (address); 
-    function isLimaManager() external view returns (bool);
-    function renounceLimaManagerOwnership() external;
-    function transferLimaManagerOwnership(address _newLimaManager) external;
+    function limaGovernance() external view returns (address); 
+    function isLimaGovernance() external view returns (bool);
+    function renounceLimaGovernanceOwnership() external;
+    function transferLimaGovernanceOwnership(address _newLimaGovernance) external;
 
 }

@@ -63,23 +63,6 @@ contract LimaToken is ERC20PausableUpgradeSafe {
 
     /* ============ Modifiers ============ */
 
-    modifier onlyNotRebalancing() {
-        _isRebalancing(false);
-        _;
-    }
-    modifier onlyRebalancing() {
-        _isRebalancing(true);
-        _;
-    }
-
-    function _isRebalancing(bool active) internal view {
-        // Internal function used to reduce bytecode size
-        require(
-            limaTokenHelper.isRebalancing() == active,
-            "LM10" //"Only when rebalancing is active/inactive"
-        );
-    }
-
     modifier onlyUnderlyingToken(address _token) {
         _isOnlyUnderlyingToken(_token);
         _;
@@ -108,18 +91,18 @@ contract LimaToken is ERC20PausableUpgradeSafe {
     }
 
     /**
-     * @dev Throws if called by any account other than the limaManager.
+     * @dev Throws if called by any account other than the limaGovernance.
      */
-    modifier onlyLimaManagerOrOwner() {
-        _isOnlyLimaManagerOrOwner();
+    modifier onlyLimaGovernanceOrOwner() {
+        _isOnlyLimaGovernanceOrOwner();
         _;
     }
 
-    function _isOnlyLimaManagerOrOwner() internal view {
+    function _isOnlyLimaGovernanceOrOwner() internal view {
         require(
-            limaTokenHelper.limaManager() == _msgSender() ||
+            limaTokenHelper.limaGovernance() == _msgSender() ||
                 limaTokenHelper.owner() == _msgSender(),
-            "LM2" // "Ownable: caller is not the limaManager or owner"
+            "LM2" // "Ownable: caller is not the limaGovernance or owner"
         );
     }
 
@@ -158,17 +141,17 @@ contract LimaToken is ERC20PausableUpgradeSafe {
 
     function mint(address account, uint256 amount)
         public
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         _mint(account, amount);
     }
 
     // pausable functions
-    function pause() external onlyLimaManagerOrOwner {
+    function pause() external onlyLimaGovernanceOrOwner {
         _pause();
     }
 
-    function unpause() external onlyLimaManagerOrOwner {
+    function unpause() external onlyLimaGovernanceOrOwner {
         _unpause();
     }
 
@@ -179,6 +162,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
                 address(limaTokenHelper.limaSwap())
             ) < _amount
         ) {
+            IERC20(_token).safeApprove(address(limaTokenHelper.limaSwap()), 0);
             IERC20(_token).safeApprove(
                 address(limaTokenHelper.limaSwap()),
                 limaTokenHelper.MAX_UINT256()
@@ -219,24 +203,25 @@ contract LimaToken is ERC20PausableUpgradeSafe {
     }
 
     /**
-     * @dev Swaps token to new token  
+     * @dev Swaps token to new token
      */
     function swap(
         address _from,
         address _to,
         uint256 _amount,
         uint256 _minimumReturn
-    ) public onlyLimaManagerOrOwner returns (uint256 returnAmount) {
+    ) public onlyLimaGovernanceOrOwner returns (uint256 returnAmount) {
         return _swap(_from, _to, _amount, _minimumReturn);
     }
 
     /**
-     * @dev Initilises rebalances proccess and calls oracle
-     * Note: Can be called every 24 h by everyone and will be repayed
+     * @dev Rebalances LimaToken
+     * Will do swaps of potential governancetoken, underlying token to token that provides higher return
      */
-    function initRebalance() external onlyNotRebalancing {
-        uint256 startGas = gasleft();
-
+    function rebalance(address _bestToken, uint256 _minimumReturnGov)
+        external
+        onlyLimaGovernanceOrOwner()
+    {
         require(
             limaTokenHelper.lastRebalance() +
                 limaTokenHelper.rebalanceInterval() <
@@ -245,63 +230,6 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         );
 
         limaTokenHelper.setLastRebalance(now);
-        limaTokenHelper.setIsRebalancing(true);
-
-        IERC20(limaTokenHelper.LINK()).transfer(
-            address(limaTokenHelper.oracle()),
-            1 * 10**17
-        ); // 0.1 LINK
-
-        bytes32 _requestId = limaTokenHelper.oracle().requestDeliveryStatus(
-            address(this)
-        );
-        limaTokenHelper.setRequestId(_requestId);
-        emit RebalanceInit(msg.sender);
-        _mint(msg.sender, limaTokenHelper.getPayback(startGas - gasleft()));
-    }
-
-    /* ============ Main Functions ============ */
-    // response structure: uint8-uint24-uint8-uint24-uint8-uint24-address
-
-    /**
-     * @dev Data Provided by oracle needed for rebalance 
-     * @param _requestId The requestId from oracle.
-     * @param _data The packed data newToken address, minimumReturn for rebalance, 
-     *              minimumReturn on governance token swap, and amount to sell for LINK.
-     *              response structure: uint8-uint24-uint8-uint24-uint8-uint24-address
-     */
-    function receiveOracleData(bytes32 _requestId, bytes32 _data)
-        public
-        virtual
-        onlyRebalancing
-    {
-        limaTokenHelper.isReceiveOracleData(_requestId, msg.sender);
-
-        limaTokenHelper.setOracleData(_data);
-
-        limaTokenHelper.setIsOracleDataReturned(true);
-
-        emit ReadyForRebalance();
-    }
-
-    /**
-     * @dev Rebalances LimaToken 
-     * Will do swaps of potential governancetoken, underlying token to token that provides higher return
-     * Will swap to LINK when needed
-     * Uses data stored by receiveOracleData in getRebalancingData()
-     */
-    function rebalance() external onlyRebalancing {
-        uint256 startGas = gasleft();
-        require(limaTokenHelper.isOracleDataReturned(), "LM8"); //only rebalance data is returned
-
-        (
-            address _bestToken,
-            uint256 _minimumReturn,
-            uint256 _minimumReturnGov,
-            uint256 _amountToSellForLink,
-            uint256 _minimumReturnLink,
-            address _govToken
-        ) = limaTokenHelper.getRebalancingData();
 
         //send fee to fee wallet
         _unwrap(
@@ -310,21 +238,12 @@ contract LimaToken is ERC20PausableUpgradeSafe {
             limaTokenHelper.feeWallet()
         );
 
-        //swap link
-        if (_amountToSellForLink != 0) {
-            _swap(
-                limaTokenHelper.currentUnderlyingToken(),
-                limaTokenHelper.LINK(),
-                _amountToSellForLink,
-                _minimumReturnLink
-            );
-        }
-
+        address govToken = limaTokenHelper.getGovernanceToken();
         //swap gov
         _swap(
-            _govToken,
+            govToken,
             _bestToken,
-            IERC20(_govToken).balanceOf(address(this)),
+            IERC20(govToken).balanceOf(address(this)),
             _minimumReturnGov
         );
 
@@ -333,22 +252,23 @@ contract LimaToken is ERC20PausableUpgradeSafe {
             limaTokenHelper.currentUnderlyingToken(),
             _bestToken,
             getUnderlyingTokenBalance(),
-            _minimumReturn
+            limaTokenHelper
+                .limaSwap()
+                .getUnderlyingAmount(
+                limaTokenHelper.currentUnderlyingToken(),
+                getUnderlyingTokenBalance()
+            )
+                .mul(980)
+                .div(1000) //cose it is 1 to 1 ?
         );
         emit RebalanceExecute(
             limaTokenHelper.currentUnderlyingToken(),
             _bestToken
         );
-
         limaTokenHelper.setCurrentUnderlyingToken(_bestToken);
         limaTokenHelper.setLastUnderlyingBalancePer1000(
             getUnderlyingTokenBalanceOf(1000 ether)
         );
-
-        limaTokenHelper.setIsRebalancing(false);
-        limaTokenHelper.setIsOracleDataReturned(false);
-
-        _mint(msg.sender, limaTokenHelper.getPayback(startGas - gasleft()));
     }
 
     /**
@@ -363,7 +283,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         uint256 _amount,
         address _recipient,
         uint256 _minimumReturn
-    ) external onlyLimaManagerOrOwner returns (bool) {
+    ) external onlyLimaGovernanceOrOwner returns (bool) {
         return
             _redeem(
                 _recipient,
@@ -393,7 +313,6 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         external
         onlyInvestmentToken(_investmentToken)
         onlyAmunUsers
-        onlyNotRebalancing
         returns (bool)
     {
         uint256 balance = getUnderlyingTokenBalance();
@@ -436,12 +355,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         uint256 _amount,
         address _recipient,
         uint256 _minimumReturn
-    )
-        internal
-        onlyInvestmentToken(_payoutToken)
-        onlyNotRebalancing
-        returns (bool)
-    {
+    ) internal onlyInvestmentToken(_payoutToken) returns (bool) {
         uint256 underlyingAmount = getUnderlyingTokenBalanceOf(_amount);
         _burn(_investor, _amount);
 

@@ -13,7 +13,7 @@ import {
     OwnableUpgradeSafe
 } from "@openzeppelin/contracts-ethereum-package/contracts/access/Ownable.sol";
 import {AddressArrayUtils} from "./library/AddressArrayUtils.sol";
-import {OwnableLimaManager} from "./limaTokenModules/OwnableLimaManager.sol";
+import {OwnableLimaGovernance} from "./limaTokenModules/OwnableLimaGovernance.sol";
 
 import {ILimaSwap} from "./interfaces/ILimaSwap.sol";
 import {IAmunUser} from "./interfaces/IAmunUser.sol";
@@ -25,7 +25,7 @@ import {ILimaOracle} from "./interfaces/ILimaOracle.sol";
  *
  * Standard LimaToken.
  */
-contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
+contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaGovernance {
     using AddressArrayUtils for address[];
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -34,7 +34,6 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
     address public constant USDC = address(
         0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
     );
-    address public LINK; 
 
     // List of UnderlyingTokens
     address[] public underlyingTokens;
@@ -55,18 +54,11 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
     uint256 public lastRebalance;
     uint256 public rebalanceInterval;
 
-    ILimaOracle public oracle;
-    bytes32 public oracleData;
-    bytes32 public requestId;
 
-    bool public isOracleDataReturned;
-    bool public isRebalancing;
 
-    uint256 public rebalanceBonus;
     uint256 public payoutGas;
 
-    uint256 public minimumReturnLink;
-   
+
     /**
      * @dev Initializes contract
      */
@@ -77,9 +69,7 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
         address[] memory _underlyingTokens,
         uint256 _mintFee,
         uint256 _burnFee,
-        uint256 _performanceFee,
-        address _LINK,
-        address _oracle
+        uint256 _performanceFee
     ) public initializer {
         require(
             _underlyingTokens.contains(_currentUnderlyingToken),
@@ -89,7 +79,7 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
 
         limaSwap = ILimaSwap(_limaSwap);
 
-        __OwnableLimaManager_init_unchained();
+        __OwnableLimaGovernance_init_unchained();
 
         underlyingTokens = _underlyingTokens;
         currentUnderlyingToken = _currentUnderlyingToken;
@@ -100,29 +90,22 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
         lastRebalance = now;
         lastUnderlyingBalancePer1000 = 0;
         feeWallet = _feeWallet;
-
-        rebalanceBonus = 0;
-        payoutGas = 21000; //for minting to user
-        LINK = _LINK;
-
-        oracle = ILimaOracle(_oracle);
-        minimumReturnLink = 10;
     }
 
     /**
-     * @dev Throws if called by any account other than the limaManager.
+     * @dev Throws if called by any account other than the limaGovernance.
      */
-    modifier onlyLimaManagerOrOwner() {
-        _isLimaManagerOrOwner();
+    modifier onlyLimaGovernanceOrOwner() {
+        _isLimaGovernanceOrOwner();
         _;
     }
 
-    function _isLimaManagerOrOwner() internal view {
+    function _isLimaGovernanceOrOwner() internal view {
         require(
-            limaManager() == _msgSender() ||
+            limaGovernance() == _msgSender() ||
                 owner() == _msgSender() ||
                 limaToken == _msgSender(),
-            "LS2" //"Ownable: caller is not the limaManager or owner"
+            "LS2" //"Ownable: caller is not the limaGovernance or owner"
         );
     }
 
@@ -149,7 +132,7 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
 
     function addUnderlyingToken(address _underlyingToken)
         external
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         require(
             !isUnderlyingTokens(_underlyingToken),
@@ -161,7 +144,7 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
 
     function removeUnderlyingToken(address _underlyingToken)
         external
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         underlyingTokens = underlyingTokens.remove(_underlyingToken);
     }
@@ -169,7 +152,7 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
     function setCurrentUnderlyingToken(address _currentUnderlyingToken)
         external
         onlyUnderlyingToken(_currentUnderlyingToken)
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         currentUnderlyingToken = _currentUnderlyingToken;
     }
@@ -177,7 +160,7 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
     function setLimaToken(address _limaToken)
         external
         noEmptyAddress(_limaToken)
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         limaToken = _limaToken;
     }
@@ -185,7 +168,7 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
     function setLimaSwap(address _limaSwap)
         public
         noEmptyAddress(_limaSwap)
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         limaSwap = ILimaSwap(_limaSwap);
     }
@@ -193,96 +176,44 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaManager {
     function setFeeWallet(address _feeWallet)
         external
         noEmptyAddress(_feeWallet)
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         feeWallet = _feeWallet;
     }
 
     function setPerformanceFee(uint256 _performanceFee)
         external
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         performanceFee = _performanceFee;
     }
 
-    function setBurnFee(uint256 _burnFee) external onlyLimaManagerOrOwner {
+    function setBurnFee(uint256 _burnFee) external onlyLimaGovernanceOrOwner {
         burnFee = _burnFee;
     }
 
-    function setMintFee(uint256 _mintFee) external onlyLimaManagerOrOwner {
+    function setMintFee(uint256 _mintFee) external onlyLimaGovernanceOrOwner {
         mintFee = _mintFee;
-    }
-
-    function setRequestId(bytes32 _requestId) external onlyLimaManagerOrOwner {
-        requestId = _requestId;
-    }
-
-    function setLimaOracle(address _oracle) external onlyLimaManagerOrOwner {
-        oracle = ILimaOracle(_oracle);
     }
 
     function setLastUnderlyingBalancePer1000(
         uint256 _lastUnderlyingBalancePer1000
-    ) external onlyLimaManagerOrOwner {
+    ) external onlyLimaGovernanceOrOwner {
         lastUnderlyingBalancePer1000 = _lastUnderlyingBalancePer1000;
     }
 
     function setLastRebalance(uint256 _lastRebalance)
         external
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         lastRebalance = _lastRebalance;
     }
 
     function setRebalanceInterval(uint256 _rebalanceInterval)
         external
-        onlyLimaManagerOrOwner
+        onlyLimaGovernanceOrOwner
     {
         rebalanceInterval = _rebalanceInterval;
-    }
-
-    function setRebalanceBonus(uint256 _rebalanceBonus)
-        external
-        onlyLimaManagerOrOwner
-    {
-        rebalanceBonus = _rebalanceBonus;
-    }
-
-    function setPayoutGas(uint256 _payoutGas) external onlyLimaManagerOrOwner {
-        payoutGas = _payoutGas;
-    }
-
-    function setOracleData(bytes32 _data) external onlyLimaManagerOrOwner {
-        oracleData = _data;
-    }
-
-    function setIsRebalancing(bool _isRebalancing)
-        external
-        onlyLimaManagerOrOwner
-    {
-        isRebalancing = _isRebalancing;
-    }
-
-    function setIsOracleDataReturned(bool _isOracleDataReturned)
-        public
-        onlyLimaManagerOrOwner
-    {
-        isOracleDataReturned = _isOracleDataReturned;
-    }
-
-    function setLink(address _LINK) public onlyLimaManagerOrOwner {
-        LINK = _LINK;
-    }
-
-    function shouldRebalance(
-        uint256 _newToken,
-        uint256 _minimumReturnGov,
-        uint256 _amountToSellForLink
-    ) external view returns (bool) {
-        return
-            !(underlyingTokens[_newToken] == currentUnderlyingToken &&
-                _minimumReturnGov == 0 &&
-                _amountToSellForLink == 0);
     }
 
     /* ============ View ============ */

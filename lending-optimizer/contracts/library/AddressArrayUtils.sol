@@ -31,25 +31,6 @@ library AddressArrayUtils {
     }
 
     /**
-    * Returns true if there are 2 elements that are the same in an array
-    * @param A The input array to search
-    * @return Returns boolean for the first occurrence of a duplicate
-    */
-    function hasDuplicate(address[] memory A) internal pure returns(bool) {
-        require(A.length > 0, "A is empty");
-
-        for (uint256 i = 0; i < A.length - 1; i++) {
-            address current = A[i];
-            for (uint256 j = i + 1; j < A.length; j++) {
-                if (current == A[j]) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
      * @param A The input array to search
      * @param a The address to remove     
      * @return Returns the array with the object removed.
