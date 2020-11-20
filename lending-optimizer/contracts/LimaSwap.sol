@@ -480,7 +480,7 @@ contract LimaSwap is AddressStorage, ReentrancyGuardUpgradeSafe {
     }
 
     function _transferAmountToSwap(address from, uint256 amount) internal {
-        IERC20(from).safeTransferFrom(msg.sender, address(this), amount);
+        IERC20(from).safeTransferFrom(_msgSender(), address(this), amount);
     }
 
     // curve interface functions
