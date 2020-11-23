@@ -8,6 +8,9 @@ import {
 import {
     SafeERC20
 } from "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/SafeERC20.sol";
+import {
+    ReentrancyGuardUpgradeSafe
+} from "@openzeppelin/contracts-ethereum-package/contracts/utils/ReentrancyGuard.sol";
 
 import {AddressArrayUtils} from "./library/AddressArrayUtils.sol";
 
@@ -20,7 +23,7 @@ import {ILimaTokenHelper} from "./interfaces/ILimaTokenHelper.sol";
  *
  * Standard LimaToken.
  */
-contract LimaToken is ERC20PausableUpgradeSafe {
+contract LimaToken is ERC20PausableUpgradeSafe, ReentrancyGuardUpgradeSafe {
     using AddressArrayUtils for address[];
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
@@ -308,6 +311,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         uint256 _minimumReturn
     )
         external
+        nonReentrant
         onlyInvestmentToken(_investmentToken)
         onlyAmunUsers
         returns (bool)
@@ -316,7 +320,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
             block.number + 2 > userLastDeposit[_msgSender()],
             "cannot withdraw within the same block"
         );
-        userLastDeposit[_msgSender()] = block.number;
+        userLastDeposit[tx.origin] = block.number;
         uint256 balance = getUnderlyingTokenBalance();
 
         IERC20(_investmentToken).safeTransferFrom(
@@ -357,12 +361,12 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         uint256 _amount,
         address _recipient,
         uint256 _minimumReturn
-    ) internal onlyInvestmentToken(_payoutToken) returns (bool) {
+    ) internal nonReentrant onlyInvestmentToken(_payoutToken) returns (bool) {
         require(
             block.number + 2 > userLastDeposit[_msgSender()],
             "cannot withdraw within the same block"
         );
-        userLastDeposit[_msgSender()] = block.number;
+        userLastDeposit[tx.origin] = block.number;
         uint256 underlyingAmount = getUnderlyingTokenBalanceOf(_amount);
         _burn(_investor, _amount);
 

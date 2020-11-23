@@ -376,7 +376,7 @@ contract Vault is
             require(IStrategy(strategy()).depositArbCheck(), "Too much arb");
         }
 
-        userLastDeposit[msg.sender] = block.number;
+        userLastDeposit[tx.origin] = block.number;
 
         uint256 toMint = totalSupply() == 0
             ? amount
