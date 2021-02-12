@@ -343,77 +343,7 @@ describe("LimaTokenHelper", function () {
       expect(await tokenHelper.rebalanceInterval()).to.eq(one);
     });
   });
- 
-  describe.skip("#decodeOracleData", function () {
-    it("decodes data properly", async () => {
-      const num1 = 2n ** 72n + 2n ** 64n;
-      const num2 = BigInt("123456789012345678901234567890");
-      const num3 = BigInt("0x1fffffffffffff");
-      const callData = packData(link.address, num1, num2, num3);
 
-      const data = await tokenHelper.decodeOracleData(callData);
-
-      expect(num1 - BigInt(data.a.toString())).to.be.eq(0n);
-      expect(num2 / (num2 - BigInt(data.b.toString()))).to.satisfy(
-        (x) => x > 1_000_000_0n
-      );
-      expect(num3 / (num3 - BigInt(data.c.toString()))).to.satisfy(
-        (x) => x > 1_000_000_0n
-      );
-    });
-
-    it("packed data should be close to original data after unpacking", async function () {
-      const newToken = underlyingToken3.address;
-      const a = ethers.utils.parseEther("100");
-      const b = 1;
-      const c = ethers.utils.parseEther("1000000");
-
-      const callData = packData(
-        newToken,
-        BigInt(a.toString()),
-        BigInt(b.toString()),
-        BigInt(c.toString())
-      );
-      const [newToken2, a2, b2, c2] = await tokenHelper.decodeOracleData(
-        callData
-      );
-
-      expect(newToken).to.be.eq(newToken2);
-      expect(a2).to.be.above(ethers.utils.parseEther("97"));
-      expect(b2).to.be.eq(1);
-      expect(c2).to.be.above(ethers.utils.parseEther("999700"));
-    });
-  });
-  describe.skip("#getRebalancingData", function () {
-    it("packed data should be close to original data after unpacking", async function () {
-      const newToken = underlyingToken3.address;
-      const a = ethers.utils.parseEther("100");
-      const b = 1;
-      const c = ethers.utils.parseEther("1000000");
-
-      const callData = packData(
-        newToken,
-        BigInt(a.toString()),
-        BigInt(b.toString()),
-        BigInt(c.toString())
-      );
-
-      await tokenHelper.setOracleData(callData)
-      const [
-        newToken2,
-        a2,
-        b2,
-        c2,
-        // minimumReturnLink2,
-        // governanceToken2,
-      ] = await tokenHelper.getRebalancingData();
-
-      expect(newToken).to.be.eq(newToken2);
-      expect(a2).to.be.above(ethers.utils.parseEther("97"));
-      expect(b2).to.be.eq(1);
-      expect(c2).to.be.above(ethers.utils.parseEther("999700"));
-    });
-  });
 
   describe("#getPerformanceFee", function () {
     //todo

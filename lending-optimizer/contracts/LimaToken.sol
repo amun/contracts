@@ -8,13 +8,14 @@ import {
 import {
     SafeERC20
 } from "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/SafeERC20.sol";
+import {
+    ReentrancyGuardUpgradeSafe
+} from "@openzeppelin/contracts-ethereum-package/contracts/utils/ReentrancyGuard.sol";
 
 import {AddressArrayUtils} from "./library/AddressArrayUtils.sol";
 
 import {ILimaSwap} from "./interfaces/ILimaSwap.sol";
 import {ILimaTokenHelper} from "./interfaces/ILimaTokenHelper.sol";
-import {ILimaOracleReceiver} from "./interfaces/ILimaOracleReceiver.sol";
-import {ILimaOracle} from "./interfaces/ILimaOracle.sol";
 
 /**
  * @title LimaToken
@@ -22,19 +23,18 @@ import {ILimaOracle} from "./interfaces/ILimaOracle.sol";
  *
  * Standard LimaToken.
  */
-contract LimaToken is ERC20PausableUpgradeSafe {
+contract LimaToken is ERC20PausableUpgradeSafe, ReentrancyGuardUpgradeSafe {
     using AddressArrayUtils for address[];
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     event Create(address _from, uint256 _amount);
     event Redeem(address _from, uint256 _amount);
-    event RebalanceInit(address _sender);
     event RebalanceExecute(address _oldToken, address _newToken);
-    event ReadyForRebalance();
 
     // address public owner;
     ILimaTokenHelper public limaTokenHelper; //limaTokenStorage
+    mapping(address => uint256) internal userLastDeposit;
 
     /**
      * @dev Initializes contract
@@ -53,11 +53,11 @@ contract LimaToken is ERC20PausableUpgradeSafe {
 
         if (_underlyingAmount > 0 && _limaAmount > 0) {
             IERC20(limaTokenHelper.currentUnderlyingToken()).safeTransferFrom(
-                msg.sender,
+                _msgSender(),
                 address(this),
                 _underlyingAmount
             );
-            _mint(msg.sender, _limaAmount);
+            _mint(_msgSender(), _limaAmount);
         }
     }
 
@@ -114,7 +114,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
     function _isOnlyAmunUser() internal view {
         if (limaTokenHelper.isOnlyAmunUserActive()) {
             require(
-                limaTokenHelper.isAmunUser(msg.sender),
+                limaTokenHelper.isAmunUser(_msgSender()),
                 "LM3" //"AmunUsers: msg sender must be part of amunUsers."
             );
         }
@@ -311,14 +311,20 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         uint256 _minimumReturn
     )
         external
+        nonReentrant
         onlyInvestmentToken(_investmentToken)
         onlyAmunUsers
         returns (bool)
     {
+        require(
+            block.number + 2 > userLastDeposit[_msgSender()],
+            "cannot withdraw within the same block"
+        );
+        userLastDeposit[tx.origin] = block.number;
         uint256 balance = getUnderlyingTokenBalance();
 
         IERC20(_investmentToken).safeTransferFrom(
-            msg.sender,
+            _msgSender(),
             address(this),
             _amount
         );
@@ -345,7 +351,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
 
         _mint(_recipient, _amount);
 
-        emit Create(msg.sender, _amount);
+        emit Create(_msgSender(), _amount);
         return true;
     }
 
@@ -355,7 +361,12 @@ contract LimaToken is ERC20PausableUpgradeSafe {
         uint256 _amount,
         address _recipient,
         uint256 _minimumReturn
-    ) internal onlyInvestmentToken(_payoutToken) returns (bool) {
+    ) internal nonReentrant onlyInvestmentToken(_payoutToken) returns (bool) {
+        require(
+            block.number + 2 > userLastDeposit[_msgSender()],
+            "cannot withdraw within the same block"
+        );
+        userLastDeposit[tx.origin] = block.number;
         uint256 underlyingAmount = getUnderlyingTokenBalanceOf(_amount);
         _burn(_investor, _amount);
 
@@ -371,7 +382,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
             );
             underlyingAmount = underlyingAmount - fee;
         }
-        emit Redeem(msg.sender, _amount);
+        emit Redeem(_msgSender(), _amount);
 
         _amount = _swap(
             limaTokenHelper.currentUnderlyingToken(),
@@ -400,7 +411,7 @@ contract LimaToken is ERC20PausableUpgradeSafe {
     ) external returns (bool) {
         return
             _redeem(
-                msg.sender,
+                _msgSender(),
                 _payoutToken,
                 _amount,
                 _recipient,

@@ -105,8 +105,6 @@ describe("LimaToken", function () {
   });
 
   async function fixture() {
-    const OracleContract = await ethers.getContractFactory("FakeOracle");
-    limaOracle = await upgrades.deployProxy(OracleContract);
 
     FakeInvestmentTokenContract = await ethers.getContractFactory(
       "FakeInvestmentToken"

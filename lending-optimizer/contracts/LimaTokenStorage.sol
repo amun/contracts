@@ -17,7 +17,6 @@ import {OwnableLimaGovernance} from "./limaTokenModules/OwnableLimaGovernance.so
 
 import {ILimaSwap} from "./interfaces/ILimaSwap.sol";
 import {IAmunUser} from "./interfaces/IAmunUser.sol";
-import {ILimaOracle} from "./interfaces/ILimaOracle.sol";
 
 /**
  * @title LimaToken
@@ -53,10 +52,6 @@ contract LimaTokenStorage is OwnableUpgradeSafe, OwnableLimaGovernance {
     uint256 public lastUnderlyingBalancePer1000;
     uint256 public lastRebalance;
     uint256 public rebalanceInterval;
-
-
-
-    uint256 public payoutGas;
 
 
     /**

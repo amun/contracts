@@ -166,7 +166,7 @@ describe("LimaTokenIntegration", function () {
     await tokenHelper.addInvestmentToken(usdtContract.address);
   }
   describe("#rebalance", function () {
-    it.only("rebalance (aUsdt => cUsdc)", async function () {
+    it("rebalance (aUsdt => cUsdc)", async function () {
       await limaSwap.swap(token.address, usdt, aUsdt, 90, 0); //the should be 100 now
       //setup
 
