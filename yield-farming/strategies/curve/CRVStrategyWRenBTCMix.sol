@@ -91,7 +91,7 @@ contract CRVStrategyWRenBTCMix is IStrategy, ProfitNotifier {
   ProfitNotifier(_storage, _wbtc) public {
     vault = _vault;
     underlying = _mixToken;
-    wbtc = _wbtc; 
+    wbtc = _wbtc;
     tokenIndex = TokenIndex(_tokenIndex);
     mixToken = _mixToken;
     curve = _curvePool;
@@ -100,7 +100,7 @@ contract CRVStrategyWRenBTCMix is IStrategy, ProfitNotifier {
     uni = _uniswap;
     mintr = _mintr;
 
-    uniswap_CRV2WBTC = [_crv, _weth, _wbtc]; 
+    uniswap_CRV2WBTC = [_crv, _weth, _wbtc];
 
     // set these tokens to be not salvageable
     unsalvagableTokens[wbtc] = true;

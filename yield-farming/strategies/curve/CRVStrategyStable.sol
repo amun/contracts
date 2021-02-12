@@ -250,7 +250,7 @@ contract CRVStrategyStable is IStrategy, Controllable {
       IERC20(ycrv).safeApprove(ycrvVault, 0);
       IERC20(ycrv).safeApprove(ycrvVault, ycrvBalance);
       // deposits the entire balance and also asks the vault to invest it (public function)
-      IVault(ycrvVault).deposit(ycrvBalance);
+      IVault(ycrvVault).deposit(ycrvBalance, 0);
     }
   }
 

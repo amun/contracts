@@ -117,7 +117,7 @@ contract CRVStrategyWRenBTC is IStrategy, ProfitNotifier {
     unsalvagableTokens[crv] = true;
 
     mixTokenUnit = 10 ** 18;
-    
+
     // starting with a stable price, the mainnet will override this value
     wbtcPriceCheckpoint = mixTokenUnit;
   }

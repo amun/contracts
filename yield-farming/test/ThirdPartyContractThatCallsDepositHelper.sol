@@ -12,10 +12,10 @@ contract ThirdPartyContractThatCallsDepositHelper {
     depositHelper = _depositHelper;
   }
 
-  function depositAll(uint256[] memory _amounts, address[] memory _vaults) public {
+  function depositAll(uint256[] memory _amounts, address[] memory _vaults, uint16 referral) public {
     for (uint i = 0; i < _amounts.length; i++) {
       IERC20(IVault(_vaults[i]).underlying()).approve(depositHelper, _amounts[i]);
     }
-    DepositHelper(depositHelper).depositAll(_amounts, _vaults);
+    DepositHelper(depositHelper).depositAll(_amounts, _vaults, referral);
   }
 }

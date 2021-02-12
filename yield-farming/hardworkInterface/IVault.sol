@@ -14,8 +14,8 @@ interface IVault {
     function setStrategy(address _strategy) external;
     function setVaultFractionToInvest(uint256 numerator, uint256 denominator) external;
 
-    function deposit(uint256 amountWei) external;
-    function depositFor(uint256 amountWei, address holder) external;
+    function deposit(uint256 amountWei, uint16 referral) external;
+    function depositFor(uint256 amountWei, address holder, uint16 referral) external;
 
     function withdrawAll() external;
     function withdraw(uint256 numberOfShares) external;

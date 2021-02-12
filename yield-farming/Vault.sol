@@ -28,7 +28,11 @@ contract Vault is
     mapping(address => uint256) internal userLastDeposit;
 
     event Withdraw(address indexed beneficiary, uint256 amount);
-    event Deposit(address indexed beneficiary, uint256 amount);
+    event Deposit(
+        address indexed beneficiary,
+        uint256 amount,
+        uint16 indexed referral
+    );
     event Invest(uint256 amount);
     event StrategyAnnounced(address newStrategy, uint256 time);
     event StrategyChanged(address newStrategy, address oldStrategy);
@@ -59,8 +63,8 @@ contract Vault is
         );
         ControllableInit.initialize(_storage);
 
-        uint256 underlyingUnit = 10 **
-            uint256(ERC20Detailed(address(_underlying)).decimals());
+        uint256 underlyingUnit =
+            10**uint256(ERC20Detailed(address(_underlying)).decimals());
         uint256 implementationDelay = 12 hours;
         uint256 strategyChangeDelay = 12 hours;
         VaultStorage.initialize(
@@ -271,11 +275,12 @@ contract Vault is
     }
 
     function availableToInvestOut() public view returns (uint256) {
-        uint256 wantInvestInTotal = underlyingBalanceWithInvestment()
-            .mul(vaultFractionToInvestNumerator())
-            .div(vaultFractionToInvestDenominator());
-        uint256 alreadyInvested = IStrategy(strategy())
-            .investedUnderlyingBalance();
+        uint256 wantInvestInTotal =
+            underlyingBalanceWithInvestment()
+                .mul(vaultFractionToInvestNumerator())
+                .div(vaultFractionToInvestDenominator());
+        uint256 alreadyInvested =
+            IStrategy(strategy()).investedUnderlyingBalance();
         if (alreadyInvested >= wantInvestInTotal) {
             return 0;
         } else {
@@ -302,8 +307,8 @@ contract Vault is
      * Allows for depositing the underlying asset in exchange for shares.
      * Approval is assumed.
      */
-    function deposit(uint256 amount) external defense {
-        _deposit(amount, msg.sender, msg.sender);
+    function deposit(uint256 amount, uint16 _referral) external defense {
+        _deposit(amount, msg.sender, msg.sender, _referral);
     }
 
     /*
@@ -311,8 +316,12 @@ contract Vault is
      * assigned to the holder.
      * This facilitates depositing for someone else (using DepositHelper)
      */
-    function depositFor(uint256 amount, address holder) public defense {
-        _deposit(amount, msg.sender, holder);
+    function depositFor(
+        uint256 amount,
+        address holder,
+        uint16 _referral
+    ) public defense {
+        _deposit(amount, msg.sender, holder, _referral);
     }
 
     function withdrawAll()
@@ -333,17 +342,17 @@ contract Vault is
         uint256 totalSupply = totalSupply();
         _burn(msg.sender, numberOfShares);
 
-        uint256 underlyingAmountToWithdraw = underlyingBalanceWithInvestment()
-            .mul(numberOfShares)
-            .div(totalSupply);
+        uint256 underlyingAmountToWithdraw =
+            underlyingBalanceWithInvestment().mul(numberOfShares).div(
+                totalSupply
+            );
         if (underlyingAmountToWithdraw > underlyingBalanceInVault()) {
             // withdraw everything from the strategy to accurately check the share value
             if (numberOfShares == totalSupply) {
                 IStrategy(strategy()).withdrawAllToVault();
             } else {
-                uint256 missing = underlyingAmountToWithdraw.sub(
-                    underlyingBalanceInVault()
-                );
+                uint256 missing =
+                    underlyingAmountToWithdraw.sub(underlyingBalanceInVault());
                 IStrategy(strategy()).withdrawToVault(missing);
             }
             // recalculate to improve accuracy
@@ -367,7 +376,8 @@ contract Vault is
     function _deposit(
         uint256 amount,
         address sender,
-        address beneficiary
+        address beneficiary,
+        uint16 _referral
     ) internal {
         require(amount > 0, "Cannot deposit 0");
         require(beneficiary != address(0), "holder must be defined");
@@ -376,17 +386,20 @@ contract Vault is
             require(IStrategy(strategy()).depositArbCheck(), "Too much arb");
         }
 
-        userLastDeposit[msg.sender] = block.number;
+        userLastDeposit[tx.origin] = block.number;
 
-        uint256 toMint = totalSupply() == 0
-            ? amount
-            : amount.mul(totalSupply()).div(underlyingBalanceWithInvestment());
+        uint256 toMint =
+            totalSupply() == 0
+                ? amount
+                : amount.mul(totalSupply()).div(
+                    underlyingBalanceWithInvestment()
+                );
         _mint(beneficiary, toMint);
 
         IERC20(underlying()).safeTransferFrom(sender, address(this), amount);
 
         // update the contribution amount for the beneficiary
-        emit Deposit(beneficiary, amount);
+        emit Deposit(beneficiary, amount, _referral);
     }
 
     /**

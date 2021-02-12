@@ -100,7 +100,7 @@ contract VaultMigratorStrategy is IStrategy, Controllable {
     uint256 newVaultBalanceBefore = underlying.balanceOf(newVault);
     underlying.safeApprove(newVault, 0);
     underlying.safeApprove(newVault, entireUnderlyingBalance);
-    IVault(newVault).deposit(entireUnderlyingBalance);
+    IVault(newVault).deposit(entireUnderlyingBalance, 0);
     require(underlying.balanceOf(newVault).sub(newVaultBalanceBefore) == entireUnderlyingBalance, "underlying balance mismatch");
 
     uint256 entireShareBalance = IERC20(newVault).balanceOf(address(this));

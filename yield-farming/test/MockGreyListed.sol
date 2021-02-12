@@ -13,6 +13,6 @@ contract MockGreyListed {
 
   function deposit(uint256 _token, uint256 _amount) public {
     IERC20(_token).approve(vault, _amount);
-    IVault(vault).deposit(_amount);
+    IVault(vault).deposit(_amount, 0);
   }
 }
