@@ -114,17 +114,6 @@ contract Vault is
         _;
     }
 
-    // Only smart contracts will be affected by this modifier
-    modifier defense() {
-        require(
-            (msg.sender == tx.origin) || // If it is a normal user and not smart contract,
-                // then the requirement will pass
-                !IController(controller()).greyList(msg.sender), // If it is a smart contract, then
-            "This smart contract has been grey listed" // make sure that it is not on our greyList.
-        );
-        _;
-    }
-
     /**
      * Chooses the best strategy and re-invests. If the strategy did not change, it just calls
      * doHardWork on the current strategy. Call this through controller to claim hard rewards.
@@ -307,7 +296,7 @@ contract Vault is
      * Allows for depositing the underlying asset in exchange for shares.
      * Approval is assumed.
      */
-    function deposit(uint256 amount, uint16 _referral) external defense {
+    function deposit(uint256 amount, uint16 _referral) external {
         _deposit(amount, msg.sender, msg.sender, _referral);
     }
 
@@ -320,7 +309,7 @@ contract Vault is
         uint256 amount,
         address holder,
         uint16 _referral
-    ) public defense {
+    ) public {
         _deposit(amount, msg.sender, holder, _referral);
     }
 

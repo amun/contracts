@@ -58,7 +58,6 @@ contract SushiMasterChefLPStrategy is IStrategy, Controllable, RewardTokenProfit
   bool pausedInvesting = false; // When this flag is true, the strategy will not be able to invest. But users should be able to withdraw.
 
   IMasterChef public rewardPool;
-  address public rewardToken; // unfortunately, the interface is not unified for rewardToken for all the variants
 
   // a flag for disabling selling for simplified emergency exit
   bool public sell = true;
@@ -110,7 +109,6 @@ contract SushiMasterChefLPStrategy is IStrategy, Controllable, RewardTokenProfit
     uniLPComponentToken0 = IUniswapV2Pair(address(underlying)).token0();
     uniLPComponentToken1 = IUniswapV2Pair(address(underlying)).token1();
     rewardPool = IMasterChef(_rewardPool);
-    rewardToken = _rewardToken;
 
     // check correctneess of poolid
     // note: the underlying arg could be removed

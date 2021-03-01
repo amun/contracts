@@ -15,17 +15,6 @@ contract DepositHelper is Controllable {
 
     event DepositComplete(address holder, uint256 numberOfTransfers);
 
-    // Only smart contracts will be affected by this modifier
-    modifier defense() {
-        require(
-            (msg.sender == tx.origin) || // If it is a normal user and not smart contract,
-                // then the requirement will pass
-                !IController(store.controller()).greyList(msg.sender), // If it is a smart contract, then make sure that
-            "DH: This smart contract has been grey listed" // it is not on our greyList.
-        );
-        _;
-    }
-
     constructor(address _storage) public Controllable(_storage) {}
 
     /*
@@ -35,7 +24,7 @@ contract DepositHelper is Controllable {
         uint256[] memory amounts,
         address[] memory vaultAddresses,
         uint16 _referral
-    ) public defense {
+    ) public {
         require(
             amounts.length == vaultAddresses.length,
             "DH: amounts and vault lengths mismatch"

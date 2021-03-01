@@ -1,4 +1,4 @@
-pragma solidity ^0.5.0;
+pragma solidity 0.5.16;
 
 /**
  * @title Proxy
@@ -8,62 +8,72 @@ pragma solidity ^0.5.0;
  * returned by the abstract _implementation() internal function.
  */
 contract Proxy {
-  /**
-   * @dev Fallback function.
-   * Implemented entirely in `_fallback`.
-   */
-  function () payable external {
-    _fallback();
-  }
-
-  /**
-   * @return The Address of the implementation.
-   */
-  function _implementation() internal view returns (address);
-
-  /**
-   * @dev Delegates execution to an implementation contract.
-   * This is a low level function that doesn't return to its internal call site.
-   * It will return to the external caller whatever the implementation returns.
-   * @param implementation Address to delegate.
-   */
-  function _delegate(address implementation) internal {
-    assembly {
-      // Copy msg.data. We take full control of memory in this inline assembly
-      // block because it will not return to Solidity code. We overwrite the
-      // Solidity scratch pad at memory position 0.
-      calldatacopy(0, 0, calldatasize)
-
-      // Call the implementation.
-      // out and outsize are 0 because we don't know the size yet.
-      let result := delegatecall(gas, implementation, 0, calldatasize, 0, 0)
-
-      // Copy the returned data.
-      returndatacopy(0, 0, returndatasize)
-
-      switch result
-      // delegatecall returns 0 on error.
-      case 0 { revert(0, returndatasize) }
-      default { return(0, returndatasize) }
+    /**
+     * @dev Fallback function.
+     * Implemented entirely in `_fallback`.
+     */
+    function() external payable {
+        _fallback();
     }
-  }
 
-  /**
-   * @dev Function that is run as the first thing in the fallback function.
-   * Can be redefined in derived contracts to add functionality.
-   * Redefinitions must call super._willFallback().
-   */
-  function _willFallback() internal {
-  }
+    /**
+     * @return The Address of the implementation.
+     */
+    function _implementation() internal view returns (address);
 
-  /**
-   * @dev fallback implementation.
-   * Extracted to enable manual triggering.
-   */
-  function _fallback() internal {
-    _willFallback();
-    _delegate(_implementation());
-  }
+    /**
+     * @dev Delegates execution to an implementation contract.
+     * This is a low level function that doesn't return to its internal call site.
+     * It will return to the external caller whatever the implementation returns.
+     * @param implementation Address to delegate.
+     */
+    function _delegate(address implementation) internal {
+        assembly {
+            // Copy msg.data. We take full control of memory in this inline assembly
+            // block because it will not return to Solidity code. We overwrite the
+            // Solidity scratch pad at memory position 0.
+            calldatacopy(0, 0, calldatasize)
+
+            // Call the implementation.
+            // out and outsize are 0 because we don't know the size yet.
+            let result := delegatecall(
+                gas,
+                implementation,
+                0,
+                calldatasize,
+                0,
+                0
+            )
+
+            // Copy the returned data.
+            returndatacopy(0, 0, returndatasize)
+
+            switch result
+                // delegatecall returns 0 on error.
+                case 0 {
+                    revert(0, returndatasize)
+                }
+                default {
+                    return(0, returndatasize)
+                }
+        }
+    }
+
+    /**
+     * @dev Function that is run as the first thing in the fallback function.
+     * Can be redefined in derived contracts to add functionality.
+     * Redefinitions must call super._willFallback().
+     */
+    function _willFallback() internal {}
+
+    /**
+     * @dev fallback implementation.
+     * Extracted to enable manual triggering.
+     */
+    function _fallback() internal {
+        _willFallback();
+        _delegate(_implementation());
+    }
 }
 
 // File: @openzeppelin/upgrades/contracts/utils/Address.sol
@@ -95,7 +105,9 @@ library OpenZeppelinUpgradesAddress {
         // TODO Check this again before the Serenity release, because all addresses will be
         // contracts then.
         // solhint-disable-next-line no-inline-assembly
-        assembly { size := extcodesize(account) }
+        assembly {
+            size := extcodesize(account)
+        }
         return size > 0;
     }
 }
@@ -104,8 +116,6 @@ library OpenZeppelinUpgradesAddress {
 
 pragma solidity ^0.5.0;
 
-
-
 /**
  * @title BaseUpgradeabilityProxy
  * @dev This contract implements a proxy that allows to change the
@@ -113,50 +123,54 @@ pragma solidity ^0.5.0;
  * Such a change is called an implementation upgrade.
  */
 contract BaseUpgradeabilityProxy is Proxy {
-  /**
-   * @dev Emitted when the implementation is upgraded.
-   * @param implementation Address of the new implementation.
-   */
-  event Upgraded(address indexed implementation);
+    /**
+     * @dev Emitted when the implementation is upgraded.
+     * @param implementation Address of the new implementation.
+     */
+    event Upgraded(address indexed implementation);
 
-  /**
-   * @dev Storage slot with the address of the current implementation.
-   * This is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1, and is
-   * validated in the constructor.
-   */
-  bytes32 internal constant IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+    /**
+     * @dev Storage slot with the address of the current implementation.
+     * This is the keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1, and is
+     * validated in the constructor.
+     */
+    bytes32 internal constant IMPLEMENTATION_SLOT =
+        0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
 
-  /**
-   * @dev Returns the current implementation.
-   * @return Address of the current implementation
-   */
-  function _implementation() internal view returns (address impl) {
-    bytes32 slot = IMPLEMENTATION_SLOT;
-    assembly {
-      impl := sload(slot)
+    /**
+     * @dev Returns the current implementation.
+     * @return Address of the current implementation
+     */
+    function _implementation() internal view returns (address impl) {
+        bytes32 slot = IMPLEMENTATION_SLOT;
+        assembly {
+            impl := sload(slot)
+        }
     }
-  }
 
-  /**
-   * @dev Upgrades the proxy to a new implementation.
-   * @param newImplementation Address of the new implementation.
-   */
-  function _upgradeTo(address newImplementation) internal {
-    _setImplementation(newImplementation);
-    emit Upgraded(newImplementation);
-  }
-
-  /**
-   * @dev Sets the implementation address of the proxy.
-   * @param newImplementation Address of the new implementation.
-   */
-  function _setImplementation(address newImplementation) internal {
-    require(OpenZeppelinUpgradesAddress.isContract(newImplementation), "Cannot set a proxy implementation to a non-contract address");
-
-    bytes32 slot = IMPLEMENTATION_SLOT;
-
-    assembly {
-      sstore(slot, newImplementation)
+    /**
+     * @dev Upgrades the proxy to a new implementation.
+     * @param newImplementation Address of the new implementation.
+     */
+    function _upgradeTo(address newImplementation) internal {
+        _setImplementation(newImplementation);
+        emit Upgraded(newImplementation);
     }
-  }
+
+    /**
+     * @dev Sets the implementation address of the proxy.
+     * @param newImplementation Address of the new implementation.
+     */
+    function _setImplementation(address newImplementation) internal {
+        require(
+            OpenZeppelinUpgradesAddress.isContract(newImplementation),
+            "Cannot set a proxy implementation to a non-contract address"
+        );
+
+        bytes32 slot = IMPLEMENTATION_SLOT;
+
+        assembly {
+            sstore(slot, newImplementation)
+        }
+    }
 }
