@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma experimental ABIEncoderV2;
-pragma solidity ^0.7.1;
+pragma solidity ^0.7.5;
 
 library DataTypes {
     // refer to the whitepaper, section 1.1 basic concepts for a formal description of these properties.

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma experimental ABIEncoderV2;
-pragma solidity ^0.7.1;
+pragma solidity ^0.7.5;
 
 import "../interfaces/ILendingLogic.sol";
 
