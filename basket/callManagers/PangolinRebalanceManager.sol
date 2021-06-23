@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma experimental ABIEncoderV2;
-pragma solidity ^0.7.1;
+pragma solidity ^0.7.5;
 
 import {
     IPangolinRouter
@@ -13,7 +13,7 @@ import "../interfaces/IPangolinRebalanceManager.sol";
 contract PangolinRebalanceManager is IPangolinRebalanceManager {
     IExperiPie public immutable basket;
     IPangolinRouter public immutable pangolin;
-    address public rebalanceManager; 
+    address public rebalanceManager;
     IERC20 private immutable nativeToken;
 
     event Rebalanced(address indexed basket);
@@ -26,7 +26,11 @@ contract PangolinRebalanceManager is IPangolinRebalanceManager {
     );
     event RebalanceManagerSet(address indexed rebalanceManager);
 
-    constructor(address _basket, address _pangolin, address _nativeToken) {
+    constructor(
+        address _basket,
+        address _pangolin,
+        address _nativeToken
+    ) {
         require(_basket != address(0), "INVALID_BASKET");
         require(_pangolin != address(0), "INVALID_PANGOLIN");
         require(_nativeToken != address(0), "INVALID_NATIVE_TOKEN");
@@ -38,13 +42,14 @@ contract PangolinRebalanceManager is IPangolinRebalanceManager {
     }
 
     modifier onlyRebalanceManager() {
-        require(
-            msg.sender == rebalanceManager, "NOT_ALLOWED"
-        );
+        require(msg.sender == rebalanceManager, "NOT_ALLOWED");
         _;
     }
 
-    function setRebalanceManager(address _rebalanceManager) external onlyRebalanceManager {
+    function setRebalanceManager(address _rebalanceManager)
+        external
+        onlyRebalanceManager
+    {
         rebalanceManager = _rebalanceManager;
         emit RebalanceManagerSet(_rebalanceManager);
     }
@@ -59,7 +64,10 @@ contract PangolinRebalanceManager is IPangolinRebalanceManager {
     ) internal {
         // approve fromToken to pangolin
         // IERC20(fromToken).approve(address(pangolin), uint256(-1));
-        if(IERC20(fromToken).allowance(address(basket), address(pangolin)) < quantity){
+        if (
+            IERC20(fromToken).allowance(address(basket), address(pangolin)) <
+            quantity
+        ) {
             basket.singleCall(
                 fromToken,
                 abi.encodeWithSelector(

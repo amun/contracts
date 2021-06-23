@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma experimental ABIEncoderV2;
-pragma solidity ^0.7.1;
+pragma solidity ^0.7.5;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -29,56 +29,96 @@ contract LendingLogicCompound is Ownable, ILendingLogic {
         blocksPerYear = _blocks;
     }
 
-    function getAPRFromWrapped(address _token) public view override returns(uint256) {
+    function getAPRFromWrapped(address _token)
+        public
+        view
+        override
+        returns (uint256)
+    {
         return ICToken(_token).supplyRatePerBlock().mul(blocksPerYear);
     }
 
-    function getAPRFromUnderlying(address _token) external view override returns(uint256) {
-        address cToken = lendingRegistry.underlyingToProtocolWrapped(_token, protocolKey);
+    function getAPRFromUnderlying(address _token)
+        external
+        view
+        override
+        returns (uint256)
+    {
+        address cToken =
+            lendingRegistry.underlyingToProtocolWrapped(_token, protocolKey);
         return getAPRFromWrapped(cToken);
     }
 
-    function lend(address _underlying, uint256 _amount) external view override returns(address[] memory targets, bytes[] memory data) {
+    function lend(address _underlying, uint256 _amount)
+        external
+        view
+        override
+        returns (address[] memory targets, bytes[] memory data)
+    {
         IERC20 underlying = IERC20(_underlying);
 
         targets = new address[](3);
         data = new bytes[](3);
 
-
-        address cToken = lendingRegistry.underlyingToProtocolWrapped(_underlying, protocolKey);
+        address cToken =
+            lendingRegistry.underlyingToProtocolWrapped(
+                _underlying,
+                protocolKey
+            );
 
         // zero out approval to be sure
         targets[0] = _underlying;
-        data[0] = abi.encodeWithSelector(underlying.approve.selector, cToken, 0);
+        data[0] = abi.encodeWithSelector(
+            underlying.approve.selector,
+            cToken,
+            0
+        );
 
         // Set approval
         targets[1] = _underlying;
-        data[1] = abi.encodeWithSelector(underlying.approve.selector, cToken, _amount);
+        data[1] = abi.encodeWithSelector(
+            underlying.approve.selector,
+            cToken,
+            _amount
+        );
 
         // Deposit into Compound
         targets[2] = cToken;
 
-        data[2] =  abi.encodeWithSelector(ICToken.mint.selector, _amount);
+        data[2] = abi.encodeWithSelector(ICToken.mint.selector, _amount);
 
-        return(targets, data);
+        return (targets, data);
     }
 
-    function unlend(address _wrapped, uint256 _amount) external view override returns(address[] memory targets, bytes[] memory data) {
+    function unlend(address _wrapped, uint256 _amount)
+        external
+        view
+        override
+        returns (address[] memory targets, bytes[] memory data)
+    {
         targets = new address[](1);
         data = new bytes[](1);
 
         targets[0] = _wrapped;
         data[0] = abi.encodeWithSelector(ICToken.redeem.selector, _amount);
 
-        return(targets, data);
+        return (targets, data);
     }
 
-    function exchangeRate(address _wrapped) external override returns(uint256) {
+    function exchangeRate(address _wrapped)
+        external
+        override
+        returns (uint256)
+    {
         return ICToken(_wrapped).exchangeRateCurrent();
     }
 
-    function exchangeRateView(address _wrapped) external view override returns(uint256) {
+    function exchangeRateView(address _wrapped)
+        external
+        view
+        override
+        returns (uint256)
+    {
         return ICToken(_wrapped).exchangeRateStored();
     }
-
 }

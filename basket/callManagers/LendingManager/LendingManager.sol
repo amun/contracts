@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma experimental ABIEncoderV2;
-pragma solidity ^0.7.1;
+pragma solidity ^0.7.5;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -14,8 +14,13 @@ contract LendingManager is Ownable, ReentrancyGuard {
     LendingRegistry public lendingRegistry;
     IExperiPie public basket;
 
-    event Lend(address indexed underlying, uint256 amount, bytes32 indexed protocol);
+    event Lend(
+        address indexed underlying,
+        uint256 amount,
+        bytes32 indexed protocol
+    );
     event UnLend(address indexed wrapped, uint256 amount);
+
     /**
         @notice Constructor
         @param _lendingRegistry Address of the lendingRegistry contract
@@ -34,15 +39,18 @@ contract LendingManager is Ownable, ReentrancyGuard {
         @param _amount Amount of underlying to lend
         @param _protocol Bytes32 protocol key to lend to
     */
-    function lend(address _underlying, uint256 _amount, bytes32 _protocol) public onlyOwner nonReentrant {
+    function lend(
+        address _underlying,
+        uint256 _amount,
+        bytes32 _protocol
+    ) public onlyOwner nonReentrant {
         // _amount or actual balance, whatever is less
-        uint256 amount = _amount.min(IERC20(_underlying).balanceOf(address(basket)));
+        uint256 amount =
+            _amount.min(IERC20(_underlying).balanceOf(address(basket)));
 
         //lend token
-        (
-            address[] memory _targets,
-            bytes[] memory _data
-        ) = lendingRegistry.getLendTXData(_underlying, amount, _protocol);
+        (address[] memory _targets, bytes[] memory _data) =
+            lendingRegistry.getLendTXData(_underlying, amount, _protocol);
 
         basket.callNoValue(_targets, _data);
 
@@ -50,7 +58,9 @@ contract LendingManager is Ownable, ReentrancyGuard {
         removeToken(_underlying);
 
         // add wrapped token
-        addToken(lendingRegistry.underlyingToProtocolWrapped(_underlying, _protocol));
+        addToken(
+            lendingRegistry.underlyingToProtocolWrapped(_underlying, _protocol)
+        );
 
         emit Lend(_underlying, _amount, _protocol);
     }
@@ -60,16 +70,19 @@ contract LendingManager is Ownable, ReentrancyGuard {
         @param _wrapped Address of the wrapped token
         @param _amount Amount of the wrapped token to unlend
     */
-    function unlend(address _wrapped, uint256 _amount) public onlyOwner nonReentrant {
+    function unlend(address _wrapped, uint256 _amount)
+        public
+        onlyOwner
+        nonReentrant
+    {
         // unlend token
-         // _amount or actual balance, whatever is less
-        uint256 amount = _amount.min(IERC20(_wrapped).balanceOf(address(basket)));
+        // _amount or actual balance, whatever is less
+        uint256 amount =
+            _amount.min(IERC20(_wrapped).balanceOf(address(basket)));
 
         //Unlend token
-        (
-            address[] memory _targets,
-            bytes[] memory _data
-        ) = lendingRegistry.getUnlendTXData(_wrapped, amount);
+        (address[] memory _targets, bytes[] memory _data) =
+            lendingRegistry.getUnlendTXData(_wrapped, amount);
         basket.callNoValue(_targets, _data);
 
         // if needed add underlying
@@ -88,34 +101,49 @@ contract LendingManager is Ownable, ReentrancyGuard {
         @param _toProtocol Protocol to deposit bounced tokens in
         @dev Uses reentrency protection of unlend() and lend()
     */
-    function bounce(address _wrapped, uint256 _amount, bytes32 _toProtocol) external {
-       unlend(_wrapped, _amount);
-       // Bounce all to new protocol
-       lend(lendingRegistry.wrappedToUnderlying(_wrapped), uint256(-1), _toProtocol);
+    function bounce(
+        address _wrapped,
+        uint256 _amount,
+        bytes32 _toProtocol
+    ) external {
+        unlend(_wrapped, _amount);
+        // Bounce all to new protocol
+        lend(
+            lendingRegistry.wrappedToUnderlying(_wrapped),
+            uint256(-1),
+            _toProtocol
+        );
     }
 
     function removeToken(address _token) internal {
         uint256 balance = basket.balance(_token);
         bool inPool = basket.getTokenInPool(_token);
         //if there is a token balance of the token is not in the pool, skip
-        if(balance != 0 || !inPool) {
+        if (balance != 0 || !inPool) {
             return;
         }
 
         // remove token
-        basket.singleCall(address(basket), abi.encodeWithSelector(basket.removeToken.selector, _token), 0);
+        basket.singleCall(
+            address(basket),
+            abi.encodeWithSelector(basket.removeToken.selector, _token),
+            0
+        );
     }
 
     function addToken(address _token) internal {
         uint256 balance = basket.balance(_token);
         bool inPool = basket.getTokenInPool(_token);
         // If token has no balance or is already in the pool, skip
-        if(balance == 0 || inPool) {
+        if (balance == 0 || inPool) {
             return;
         }
 
         // add token
-        basket.singleCall(address(basket), abi.encodeWithSelector(basket.addToken.selector, _token), 0);
+        basket.singleCall(
+            address(basket),
+            abi.encodeWithSelector(basket.addToken.selector, _token),
+            0
+        );
     }
- 
 }

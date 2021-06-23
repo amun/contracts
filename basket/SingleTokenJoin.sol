@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: Unlicense
 pragma experimental ABIEncoderV2;
-pragma solidity ^0.7.1;
+pragma solidity ^0.7.5;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -28,6 +28,7 @@ contract SingleTokenJoin {
         uint256 deadline;
         uint16 referral;
     }
+
     constructor(address _INTERMEDIATE_TOKEN, address _uniSwapLikeRouter) {
         require(_INTERMEDIATE_TOKEN != address(0), "INTERMEDIATE_ZERO");
         require(_uniSwapLikeRouter != address(0), "UNI_ROUTER_ZERO");
@@ -44,8 +45,6 @@ contract SingleTokenJoin {
             token.approve(spender, uint256(-1));
         }
     }
-
-
 
     function joinTokenSingle(JoinTokenStruct calldata _joinTokenStruct)
         external
@@ -122,7 +121,10 @@ contract SingleTokenJoin {
         }
 
         uint256 outputAmount = outputToken.balanceOf(address(this));
-        require(outputAmount == _joinTokenStruct.outputAmount, "FAILED_OUTPUT_AMOUNT");
+        require(
+            outputAmount == _joinTokenStruct.outputAmount,
+            "FAILED_OUTPUT_AMOUNT"
+        );
 
         outputToken.safeTransfer(msg.sender, outputAmount);
     }
