@@ -4,23 +4,15 @@ pragma solidity ^0.7.5;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.sol";
-
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 import "../interfaces/IExperiPie.sol";
-import "../interfaces/IRebalanceManager.sol";
+import "../interfaces/IRebalanceManagerV2.sol";
 
-contract RebalanceManager is IRebalanceManager {
+contract RebalanceManagerV2 is IRebalanceManagerV2 {
     IExperiPie public immutable basket;
 
-    enum ExchangeType {
-        NoExchange,
-        UniswapV2,
-        UniswapV3
-    }
-    mapping(address => ExchangeType) public exchanges;
+    mapping(address => bool) public exchanges;
 
     address public rebalanceManager;
 
@@ -36,17 +28,14 @@ contract RebalanceManager is IRebalanceManager {
 
     constructor(
         address _basket,
-        address _uniswapV2Like,
-        address _uniswapV3
+        address _uniswapV2Like
     ) {
         require(_basket != address(0), "INVALID_BASKET");
         require(_uniswapV2Like != address(0), "INVALID_UNISWAP_V2");
-        require(_uniswapV3 != address(0), "INVALID_UNISWAP_V3");
 
         basket = IExperiPie(_basket);
         rebalanceManager = msg.sender;
-        exchanges[_uniswapV2Like] = ExchangeType.UniswapV2;
-        exchanges[_uniswapV3] = ExchangeType.UniswapV3;
+        exchanges[_uniswapV2Like] = true;
     }
 
     modifier onlyRebalanceManager() {
@@ -62,58 +51,11 @@ contract RebalanceManager is IRebalanceManager {
         emit RebalanceManagerSet(_rebalanceManager);
     }
 
-    function setExchange(address _exchange, ExchangeType exchangeType)
+    function setExchange(address _exchange, bool _activated)
         external
         onlyRebalanceManager
     {
-        exchanges[_exchange] = exchangeType;
-    }
-
-    function _swapUniswapV3(
-        UniswapV3SwapStruct calldata swap,
-        address recipient,
-        uint256 deadline
-    ) internal {
-        if (
-            IERC20(swap.tokenIn).allowance(address(basket), swap.exchange) <
-            swap.quantity
-        ) {
-            basket.singleCall(
-                swap.tokenIn,
-                abi.encodeWithSelector(
-                    IERC20(swap.tokenIn).approve.selector,
-                    address(swap.exchange),
-                    uint256(-1)
-                ),
-                0
-            );
-        }
-        ISwapRouter.ExactInputParams memory params = ISwapRouter
-        .ExactInputParams(
-            swap.path,
-            recipient,
-            deadline,
-            swap.quantity,
-            swap.minReturn
-        );
-
-        // Swap on uniswapV3
-        // uniswapV3.exactInputSingle(params);
-        basket.singleCall(
-            address(swap.exchange),
-            abi.encodeWithSelector(
-                ISwapRouter(swap.exchange).exactInput.selector,
-                params
-            ),
-            0
-        );
-        emit Swaped(
-            address(basket),
-            swap.tokenIn,
-            swap.tokenOut,
-            swap.quantity,
-            swap.minReturn
-        );
+        exchanges[_exchange] = _activated;
     }
 
     function _swapUniswapV2(
@@ -207,12 +149,10 @@ contract RebalanceManager is IRebalanceManager {
     /**
         @notice Rebalance underling token
         @param _swapsV2 Swaps to perform
-        @param _swapsV3 Swaps to perform
         @param _deadline Unix timestamp after which the transaction will revert.
     */
     function rebalance(
         UniswapV2SwapStruct[] calldata _swapsV2,
-        UniswapV3SwapStruct[] calldata _swapsV3,
         uint256 _deadline
     ) external override onlyRebalanceManager {
         lockBasketData(block.number + 30);
@@ -220,7 +160,7 @@ contract RebalanceManager is IRebalanceManager {
         // remove token from array
         for (uint256 i; i < _swapsV2.length; i++) {
             require(
-                exchanges[_swapsV2[i].exchange] == ExchangeType.UniswapV2,
+                exchanges[_swapsV2[i].exchange],
                 "NOT_UNISWAP_V2"
             );
 
@@ -234,21 +174,6 @@ contract RebalanceManager is IRebalanceManager {
             removeToken(_swapsV2[i].path[0]);
         }
 
-        for (uint256 i; i < _swapsV3.length; i++) {
-            require(
-                exchanges[_swapsV3[i].exchange] == ExchangeType.UniswapV3,
-                "NOT_UNISWAP_V3"
-            );
-
-            //swap token
-            _swapUniswapV3(_swapsV3[i], address(basket), _deadline);
-
-            //add to token if missing
-            addToken(_swapsV3[i].tokenOut);
-
-            //remove from token if resulting quantity is 0
-            removeToken(_swapsV3[i].tokenIn);
-        }
         emit Rebalanced(address(basket));
     }
 }
